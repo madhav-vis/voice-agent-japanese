@@ -2,7 +2,7 @@
 
 ## Project goal
 
-A voice AI agent for improving Japanese conversational skill. Currently a learning project — the codebase is intentionally small and exploratory.
+A voice AI agent for improving Japanese conversational skill.
 
 ## How to work with me
 

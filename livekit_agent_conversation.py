@@ -2,10 +2,11 @@ from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import Agent, AgentSession, RunContext
 from livekit.agents.llm import function_tool
-from livekit.plugins import openai, deepgram, silero 
+from livekit.plugins import openai, silero
+from kotoba_stt import KotobaSTT
 from datetime import datetime
 from voicevox_tts import VoicevoxTTS
-import os, asyncio
+import os, asyncio, sqlite3
 
 #load env
 load_dotenv(".env")
@@ -26,7 +27,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     #Configure the voice pipeline
     session = AgentSession(
-        stt=deepgram.STT(model="nova-2", language="ja"), #speech to text
+        stt=KotobaSTT(device="mps"),
         llm=openai.LLM(
             model=os.getenv("LLM_CHOICE", "qwen2.5"),
             base_url="http://localhost:11434/v1",
@@ -41,6 +42,31 @@ async def entrypoint(ctx: agents.JobContext):
         room = ctx.room,
         agent=Assistant()
     )
+
+    async def save_transcript():
+        con = sqlite3.connect("transcripts.db")
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS transcripts (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                session   TEXT,
+                role      TEXT,
+                text      TEXT,
+                interrupted INTEGER,
+                created_at  REAL
+            )
+        """)
+        session_id = ctx.room.name
+        for msg in session.history.messages():
+            if msg.role not in ("user", "assistant"):
+                continue
+            con.execute(
+                "INSERT INTO transcripts (session, role, text, interrupted, created_at) VALUES (?, ?, ?, ?, ?)",
+                (session_id, msg.role, msg.text_content, int(msg.interrupted), msg.created_at),
+            )
+        con.commit()
+        con.close()
+
+    ctx.add_shutdown_callback(save_transcript)
 
     #generate intial greeting
     await session.generate_reply(
