@@ -16,20 +16,22 @@ A voice AI agent for improving Japanese conversational skill.
 
 - **Runtime:** Python 3.9+, managed with `uv`
 - **Voice pipeline:** LiveKit Agents framework (`livekit-agents`)
-- **STT:** Deepgram (`nova-2`, Japanese)
-- **LLM:** Ollama (local, default `qwen2.5`) via OpenAI-compatible endpoint at `http://localhost:11434/v1`
+- **STT:** kotoba-whisper-v2.0 (local, HuggingFace `transformers`, runs on MPS) — custom `KotobaSTT` plugin in `kotoba_stt.py`
+- **LLM:** Ollama (local, default `Qwen3-Swallow-8B-RL`, overridable via `LLM_CHOICE`) via OpenAI-compatible endpoint at `http://localhost:11434/v1`
 - **TTS:** VoiceVox (local, HTTP API at `http://127.0.0.1:50021`) — custom `VoicevoxTTS` plugin in `voicevox_tts.py`
 - **VAD:** Silero
 
 ## Running the agent
 
 ```bash
-uv run python livekit_basic_agent.py console
+uv run python livekit_agent_conversation.py console
 ```
 
-Requires VoiceVox and Ollama running locally before starting.
+Requires VoiceVox and Ollama running locally before starting. The kotoba model downloads to `~/.cache/huggingface/hub/` on first use.
 
-## Planned features (from NOTES.MD)
+Transcripts are saved to `transcripts.db` (SQLite; don't commit it — it contains personal conversations) when a session ends.
+
+## Planned features (from Code_Documentation.MD)
 
 - 3D avatar representation
 - Daily progress tracking (Anki-style heatmap)

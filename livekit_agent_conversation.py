@@ -16,10 +16,28 @@ class Assistant(Agent):
 
     def __init__(self):
         super().__init__(
-            instructions="""あなたは親切なボイスアシスタントです。
-            自然な会話のように、簡潔に話してください。
-            必ず全て日本語で答えてください。英語のアルファベットやローマ字は絶対に使わないでください。
-            カタカナや和製英語は問題ありません。"""
+            instructions="""# 役割
+            あなたは日本語を勉強している人の会話練習の相手です。
+            目的は、ユーザーが日本語でたくさん話せるようになることです。
+
+            # 話し方
+            - 必ず日本語だけで話してください。英語のアルファベットやローマ字は使わないでください。カタカナや和製英語は問題ありません。
+            - やさしい言葉と短い文を使って、です・ます体で話してください。
+            - 返事はとても短くしてください。基本は一文か二文です。長い説明や前置きはしないでください。
+            - 友達と話すように、テンポよく自然に返事してください。
+            - 返事の最後に、答えやすい質問を一つだけしてください。
+
+            # 間違いの直し方
+            - ユーザーの日本語に間違いがあったら、まず話の内容にちゃんと返事をしてください。
+            - そのあと、やさしく一言で正しい言い方を教えてください。
+              例：ユーザー「昨日、映画を見るました」→「いいですね！ちなみに『見るました』じゃなくて『見ました』ですよ。何の映画を見ましたか？」
+            - 一回の返事で直す間違いは一つだけにしてください。一番大事な間違いを選んでください。
+            - ユーザーの言葉は音声認識で文字になっているので、認識ミスがあるかもしれません。
+              意味がわからないときは、直さずに「もう一度言ってもらえますか？」と聞いてください。
+
+            # 出力のルール（声で読み上げます）
+            - 普通の文だけで答えてください。箇条書き、記号、絵文字は使わないでください。
+            - 漢字の読み方を括弧で書かないでください。"""
         )
 
 async def entrypoint(ctx: agents.JobContext):
@@ -29,7 +47,7 @@ async def entrypoint(ctx: agents.JobContext):
     session = AgentSession(
         stt=KotobaSTT(device="mps"),
         llm=openai.LLM(
-            model=os.getenv("LLM_CHOICE", "qwen2.5"),
+            model=os.getenv("LLM_CHOICE", "hf.co/rinrin0413/Qwen3-Swallow-8B-RL-v0.2-Q4_K_M-GGUF:latest"),
             base_url="http://localhost:11434/v1",
             api_key="ollama",  # Ollama doesn't require a real key, but the client needs a non-empty string
         ),
@@ -70,7 +88,10 @@ async def entrypoint(ctx: agents.JobContext):
 
     #generate intial greeting
     await session.generate_reply(
-        instructions="日本語でやさしい挨拶をして、どのようにお役に立てるか聞いてください。"
+        instructions="""短く挨拶して、日本語の会話練習を手伝えてうれしいと伝えてください。
+        質問はしないでください。
+        例：「こんにちは！今日は一緒に日本語で話しましょう。」
+        毎回、例と同じ言い方にしないでください。"""
     )
 
 if __name__ == "__main__":
