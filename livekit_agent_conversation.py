@@ -1,11 +1,10 @@
 from dotenv import load_dotenv
 from livekit import agents
-from livekit.agents import Agent, AgentSession, RunContext
+from livekit.agents import Agent, AgentSession, RunContext, tts
 from livekit.agents.llm import function_tool
-from livekit.plugins import openai, silero
-from kotoba_stt import KotobaSTT
+from livekit.plugins import anthropic, deepgram, silero
 from datetime import datetime
-from voicevox_tts import VoicevoxTTS
+from voicevox_tts import VoicevoxTTS, JapaneseSentenceTokenizer
 import os, asyncio, sqlite3
 
 #load env
@@ -45,13 +44,15 @@ async def entrypoint(ctx: agents.JobContext):
 
     #Configure the voice pipeline
     session = AgentSession(
-        stt=KotobaSTT(device="mps"),
-        llm=openai.LLM(
-            model=os.getenv("LLM_CHOICE", "hf.co/rinrin0413/Qwen3-Swallow-8B-RL-v0.2-Q4_K_M-GGUF:latest"),
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",  # Ollama doesn't require a real key, but the client needs a non-empty string
+        stt=deepgram.STT(model="nova-3", language="ja"),
+        llm=anthropic.LLM(
+            model="claude-haiku-4-5",
+            api_key=os.getenv("CLAUDE_API_KEY"),  # plugin defaults to ANTHROPIC_API_KEY
         ),
-        tts=VoicevoxTTS(speaker=109),  #text to speech
+        tts=tts.StreamAdapter(  #text to speech, synthesized chunk by chunk in order
+            tts=VoicevoxTTS(speaker=46),
+            sentence_tokenizer=JapaneseSentenceTokenizer(),
+        ),
         vad=silero.VAD.load(),
     )
     
