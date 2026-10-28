@@ -74,7 +74,7 @@ async def entrypoint(ctx: agents.JobContext):
                 created_at  REAL
             )
         """)
-        session_id = ctx.room.name
+        session_id = ctx.job.id
         for msg in session.history.messages():
             if msg.role not in ("user", "assistant"):
                 continue
