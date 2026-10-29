@@ -3,8 +3,10 @@ from livekit import agents
 from livekit.agents import Agent, AgentSession, RunContext, tts
 from livekit.agents.llm import function_tool
 from livekit.plugins import anthropic, deepgram, silero
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from datetime import datetime
 from voicevox_tts import VoicevoxTTS, JapaneseSentenceTokenizer
+from learner_profile import load_profile
 import os, asyncio, sqlite3
 
 #load env
@@ -13,9 +15,8 @@ load_dotenv(".env")
 class Assistant(Agent):
     """Basic voice agent"""
 
-    def __init__(self):
-        super().__init__(
-            instructions="""# 役割
+    def __init__(self, profile=None):
+        instructions = """# 役割
             あなたは日本語を勉強している人の会話練習の相手です。
             目的は、ユーザーが日本語でたくさん話せるようになることです。
 
@@ -37,7 +38,22 @@ class Assistant(Agent):
             # 出力のルール（声で読み上げます）
             - 普通の文だけで答えてください。箇条書き、記号、絵文字は使わないでください。
             - 漢字の読み方を括弧で書かないでください。"""
-        )
+
+        #learner profile from past sessions (written in English by learner_profile.py)
+        if profile:
+            level, text = profile
+            instructions += f"""
+
+            # 学習者について
+            レベル：{level}
+            {text}
+
+            - 上のレベルに合った言葉と文法を使ってください。
+            - 直す間違いを選ぶときは、上の苦手なところに関係する間違いを優先してください。
+            - このメモや前の会話を覚えていることは、聞かれない限り言わないでください。
+            - メモは英語ですが、返事は必ず日本語だけにしてください。"""
+
+        super().__init__(instructions=instructions)
 
 async def entrypoint(ctx: agents.JobContext):
     """Entry point for the agent."""
@@ -54,12 +70,18 @@ async def entrypoint(ctx: agents.JobContext):
             sentence_tokenizer=JapaneseSentenceTokenizer(),
         ),
         vad=silero.VAD.load(),
+        turn_handling={
+            #end-of-turn model reads the transcript, so a mid-sentence pause doesn't end the turn
+            "turn_detection": MultilingualModel(),
+            #learners pause to think; when the model says the sentence isn't done, wait up to 5s
+            "endpointing": {"min_delay": 0.5, "max_delay": 5.0},
+        },
     )
     
     #start the session
     await session.start(
         room = ctx.room,
-        agent=Assistant()
+        agent=Assistant(load_profile())
     )
 
     async def save_transcript():
