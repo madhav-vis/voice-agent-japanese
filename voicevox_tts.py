@@ -56,6 +56,7 @@ class VoicevoxStream(tts.ChunkedStream):
                 params={"text": self._input_text, "speaker": self._tts._speaker}
             ) as r:
                 query = await r.json()
+            query["outputSamplingRate"] = 24000  # AivisSpeech defaults to 44.1kHz; emitter expects 24kHz
 
             async with session.post(
                 f"{self._tts._base_url}/synthesis",

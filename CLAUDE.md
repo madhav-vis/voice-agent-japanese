@@ -10,7 +10,7 @@ A voice AI agent for improving Japanese conversational skill.
 - **Voice pipeline:** LiveKit Agents framework (`livekit-agents`)
 - **STT:** Deepgram `nova-3` (cloud, `language="ja"`) via `livekit-plugins-deepgram`
 - **LLM:** Claude Haiku 4.5 (`claude-haiku-4-5`) via `livekit-plugins-anthropic`, key from `CLAUDE_API_KEY`
-- **TTS:** VoiceVox (local, HTTP API at `http://127.0.0.1:50021`) — custom `VoicevoxTTS` plugin in `voicevox_tts.py`
+- **TTS:** AivisSpeech (local, VOICEVOX-compatible HTTP API at `http://127.0.0.1:10101`, speaker コハク/ノーマル `1878365376`) — custom `VoicevoxTTS` plugin in `voicevox_tts.py` (also works with VoiceVox on port 50021)
 - **VAD:** Silero
 - **Turn detection:** LiveKit `MultilingualModel` (supports Japanese) — reads the transcript to tell a mid-sentence pause from a finished turn; endpointing waits 0.5–5.0s
 - **Grammar feedback:** `grammar_police.py` — Claude Sonnet 5.5 (`claude-sonnet-5-5`) reviews user turns in `transcripts.db`, maps mistakes to `bunpro_grammar_points.csv`, writes to the `grammar_feedback` table; one API call per session, tracked (with session-level patterns) in `grammar_sessions`
@@ -23,7 +23,7 @@ A voice AI agent for improving Japanese conversational skill.
 uv run python livekit_agent_conversation.py console
 ```
 
-Requires VoiceVox  running locally before starting. On a fresh machine, download the turn-detector/VAD model files once first:
+Requires AivisSpeech running locally before starting. On a fresh machine, download the turn-detector/VAD model files once first:
 
 ```bash
 uv run python livekit_agent_conversation.py download-files

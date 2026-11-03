@@ -66,7 +66,7 @@ async def entrypoint(ctx: agents.JobContext):
             api_key=os.getenv("CLAUDE_API_KEY"),  # plugin defaults to ANTHROPIC_API_KEY
         ),
         tts=tts.StreamAdapter(  #text to speech, synthesized chunk by chunk in order
-            tts=VoicevoxTTS(speaker=46),
+            tts=VoicevoxTTS(speaker=1878365376, base_url="http://127.0.0.1:10101"),  # AivisSpeech コハク/ノーマル
             sentence_tokenizer=JapaneseSentenceTokenizer(),
         ),
         vad=silero.VAD.load(),
