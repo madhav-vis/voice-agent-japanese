@@ -7,14 +7,22 @@ load_dotenv(".env")
 MODEL = "claude-sonnet-5-5"
 HALF_LIFE_DAYS = 14  # a mistake counts half as much after two weeks
 LEVELS = ["N5", "N4", "N3", "N2", "N1"]
+MAX_FACTS = 15
+MAX_TOPICS = 15
+RECENT_SESSIONS = 2
+MAX_LINES_PER_SESSION = 150  # keep the last lines of very long sessions
+MIN_USER_LINES = 3  # sessions shorter than this (e.g. just a greeting) don't count as recent
 
 PROFILE_SCHEMA = {
     "type": "object",
     "properties": {
         "level": {"type": "string", "enum": LEVELS},
         "profile": {"type": "string"},
+        "facts": {"type": "array", "items": {"type": "string"}},
+        "topics": {"type": "array", "items": {"type": "string"}},
+        "recent_sessions": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["level", "profile"],
+    "required": ["level", "profile", "facts", "topics", "recent_sessions"],
     "additionalProperties": False,
 }
 
@@ -25,14 +33,19 @@ You get JSON stats built from the learner's analyzed sessions:
 - weak_spots: mistakes grouped by Bunpro grammar point or issue type, ranked by a recency-weighted score (recent mistakes count more), with recent examples
 - status_trend: share of correct / incorrect / unnatural user turns in recent sessions vs. earlier ones
 - patterns: session-level habits noted by the grammar reviewer
-- recent_user_turns: the learner's own recent lines (speech recognition output, so expect some recognition errors)
+- recent_sessions: the full dialogue of the learner's last sessions, oldest first, with dates. "user" lines are speech recognition output, so expect some recognition errors
+- previous: facts and topics from the previous profile, or null
 - given_level: the learner's self-reported JLPT level, or null
 
 Write:
 - level: the JLPT level whose grammar and vocabulary the partner should mostly use. If given_level is set, use it.
 - profile: plain English, under 120 words. Cover the level, the top 3 to 5 weak points (name the Japanese grammar point when there is one), recurring habits, and what is improving. Be concrete and brief. Only state what the data supports; with little data, say less.
 - Casual speech (タメ口, 俺, めっちゃ) and natural switching between casual and polite turns are valid, not weak points. Only mention register for wrong keigo or jarring switches within one utterance.
-- Don't list speech recognition problems as learner habits."""
+- Don't list speech recognition problems as learner habits.
+- facts: stable personal facts the learner has said about themselves (job, studies, hobbies, family, pets, where they live, plans, why they study Japanese). Short English phrases, e.g. "Works as a nurse", "Has a cat named Mochi". Start from previous.facts, add new ones from recent_sessions, and update or drop facts the learner has since contradicted. Only what the learner actually said, never guesses or what the assistant said. At most {max_facts}, most useful first.
+- topics: conversation topics already covered, as short English phrases (e.g. "weekend ramen with friends"). Start from previous.topics and add the topics of recent_sessions. Most recent first, at most {max_topics}; drop the oldest.
+- recent_sessions: one summary per session in recent_sessions, most recent first. Plain English, 1 to 2 sentences each, starting with the date: what was talked about and anything worth following up on next time (e.g. an upcoming trip or exam).""".format(
+    max_facts=MAX_FACTS, max_topics=MAX_TOPICS)
 
 
 def recency_weight(created_at, now):
@@ -85,59 +98,109 @@ def gather_stats(con, points):
         ) for p in json.loads(raw)
     ]
 
-    recent_user_turns = [text for (text,) in con.execute(
-        "SELECT text FROM transcripts WHERE role = 'user' AND session IN ({}) ORDER BY id DESC LIMIT 40".format(
-            ",".join("?" * len(sessions[-2:]))), sessions[-2:]
-    )][::-1]
+    #full dialogue (both roles) of the last sessions, for facts, topics, and summaries
+    substantial = [s for (s,) in con.execute(
+        "SELECT session FROM transcripts GROUP BY session HAVING SUM(role = 'user') >= ? ORDER BY MIN(id)",
+        (MIN_USER_LINES,),
+    )]
+    recent_sessions = []
+    for session in substantial[-RECENT_SESSIONS:]:
+        rows = con.execute(
+            "SELECT role, text, created_at FROM transcripts WHERE session = ? ORDER BY id DESC LIMIT ?",
+            (session, MAX_LINES_PER_SESSION),
+        ).fetchall()[::-1]
+        if rows:
+            recent_sessions.append({
+                "date": time.strftime("%Y-%m-%d", time.localtime(rows[0][2])),
+                "dialogue": [f"{role}: {text}" for role, text, _ in rows],
+            })
 
     return {
         "weak_spots": weak_spots,
         "status_trend": status_trend,
         "patterns": patterns,
-        "recent_user_turns": recent_user_turns,
+        "recent_sessions": recent_sessions,
     }
+
+
+JSON_COLUMNS = ["facts", "topics", "recent_sessions"]
 
 
 def init_db(con):
     con.execute("""
         CREATE TABLE IF NOT EXISTS learner_profile (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            level      TEXT,
-            profile    TEXT,
-            created_at REAL
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            level           TEXT,
+            profile         TEXT,
+            facts           TEXT,
+            topics          TEXT,
+            recent_sessions TEXT,
+            created_at      REAL
         )
     """)
+    #migrate tables created before facts/topics/recent_sessions existed
+    columns = {name for (_, name, *_) in con.execute("PRAGMA table_info(learner_profile)")}
+    for column in JSON_COLUMNS:
+        if column not in columns:
+            con.execute(f"ALTER TABLE learner_profile ADD COLUMN {column} TEXT")
+
+
+def latest_profile(con):
+    """Return the latest profile row as a dict (JSON columns decoded), or None."""
+    row = con.execute(
+        "SELECT level, profile, facts, topics, recent_sessions FROM learner_profile ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return None
+    level, profile, *lists = row
+    return {"level": level, "profile": profile} | {
+        column: json.loads(raw) if raw else [] for column, raw in zip(JSON_COLUMNS, lists)
+    }
 
 
 def build_profile(client, con, points):
     """Rewrite the learner profile from the raw evidence and store it as a new row."""
     given_level = os.getenv("JLPT_LEVEL") or None
-    stats = gather_stats(con, points) | {"given_level": given_level}
+    init_db(con)
+    previous = latest_profile(con)
+    stats = gather_stats(con, points) | {
+        "previous": {"facts": previous["facts"], "topics": previous["topics"]} if previous else None,
+        "given_level": given_level,
+    }
     response = client.messages.create(
         model=MODEL,
-        max_tokens=1000,
+        max_tokens=3000,
         system=INSTRUCTIONS,
         output_config={"format": {"type": "json_schema", "schema": PROFILE_SCHEMA}},
         messages=[{"role": "user", "content": json.dumps(stats, ensure_ascii=False)}],
     )
+    if response.stop_reason == "max_tokens":
+        raise RuntimeError("response hit max_tokens; output is truncated")
     result = json.loads(next(block.text for block in response.content if block.type == "text"))
     level = given_level if given_level in LEVELS else result["level"]
+    facts = result["facts"][:MAX_FACTS]
+    topics = result["topics"][:MAX_TOPICS]
+    recent = result["recent_sessions"][:RECENT_SESSIONS]
 
-    init_db(con)
     con.execute(
-        "INSERT INTO learner_profile (level, profile, created_at) VALUES (?, ?, ?)",
-        (level, result["profile"], time.time()),
+        """INSERT INTO learner_profile (level, profile, facts, topics, recent_sessions, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (level, result["profile"], *(json.dumps(x, ensure_ascii=False) for x in (facts, topics, recent)), time.time()),
     )
     con.commit()
     print(f"\n=== Learner profile ({level}) ===\n{result['profile']}")
+    print("\nFacts:\n" + "\n".join(f"  - {f}" for f in facts))
+    print("\nTopics:\n" + "\n".join(f"  - {t}" for t in topics))
+    print("\nRecent sessions:\n" + "\n".join(f"  - {r}" for r in recent))
 
 
 def load_profile(db_path="transcripts.db"):
-    """Return the latest (level, profile), or None if no profile has been built yet."""
+    """Return the latest profile as a dict, or None if no profile has been built yet."""
     con = sqlite3.connect(db_path)
     try:
-        return con.execute("SELECT level, profile FROM learner_profile ORDER BY id DESC LIMIT 1").fetchone()
-    except sqlite3.OperationalError:  # table doesn't exist yet
+        init_db(con)  # adds missing columns to an older table
+        return latest_profile(con)
+    except sqlite3.OperationalError:  # e.g. database locked
         return None
     finally:
         con.close()

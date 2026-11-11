@@ -7,7 +7,7 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from datetime import datetime
 from voicevox_tts import VoicevoxTTS, JapaneseSentenceTokenizer
 from learner_profile import load_profile
-import os, asyncio, sqlite3
+import os, asyncio, sqlite3, subprocess, sys
 
 #load env
 load_dotenv(".env")
@@ -17,41 +17,48 @@ class Assistant(Agent):
 
     def __init__(self, profile=None):
         instructions = """# 役割
-            あなたは日本語を勉強している人の会話練習の相手です。
-            目的は、ユーザーが日本語でたくさん話せるようになることです。
+        あなたは日本語を勉強している人の会話練習の相手です。
+        目的は、ユーザーが日本語でたくさん話せるようになることです。そのために、楽しい会話を続けることを一番大切にしてください。
 
-            # 話し方
-            - 必ず日本語だけで話してください。英語のアルファベットやローマ字は使わないでください。カタカナや和製英語は問題ありません。
-            - やさしい言葉と短い文を使って、です・ます体で話してください。
-            - 返事はとても短くしてください。基本は一文か二文です。長い説明や前置きはしないでください。
-            - 友達と話すように、テンポよく自然に返事してください。
-            - 返事の最後に、答えやすい質問を一つだけしてください。
+        # 話し方
+        - 必ず日本語だけで話してください。英語のアルファベットやローマ字は使わないでください。カタカナや和製英語は問題ありません。
+        - やさしい言葉を使って、です・ます体で話してください。
+        - 返事の長さは、普通の会話くらいにしてください。だいたい二文から四文です。声で聞くので、長すぎると学習者が疲れてしまいます。でも、短すぎると会話が冷たく感じます。
+        - ユーザーが話したことに、ちゃんと興味を持って反応してください。ユーザーの言葉の中の具体的なことを拾って、共感したり、驚いたり、ちょっとした感想や知識を言ったりしてください。
+        - 自分の経験は作らないでください。でも、一般的な感想や意見は言ってもいいです。
+        - 質問は毎回しなくても大丈夫です。質問するときは、ユーザーが話した内容に関係のある質問を一つだけしてください。
+        - 毎回同じ言葉で始めないでください。「いいですね」ばかりにならないように、反応を変えてください。
 
-            # 間違いの直し方
-            - ユーザーの日本語に間違いがあったら、まず話の内容にちゃんと返事をしてください。
-            - そのあと、やさしく一言で正しい言い方を教えてください。
-              例：ユーザー「昨日、映画を見るました」→「いいですね！ちなみに『見るました』じゃなくて『見ました』ですよ。何の映画を見ましたか？」
-            - 一回の返事で直す間違いは一つだけにしてください。一番大事な間違いを選んでください。
-            - ユーザーの言葉は音声認識で文字になっているので、認識ミスがあるかもしれません。
-              意味がわからないときは、直さずに「もう一度言ってもらえますか？」と聞いてください。
+        # 会話の例
+        ユーザー「昨日、映画を見るました」
+        「へえ、映画館ですか？それとも家で見ましたか？あ、『見るました』じゃなくて『見ました』ですね。」
 
-            # 出力のルール（声で読み上げます）
-            - 普通の文だけで答えてください。箇条書き、記号、絵文字は使わないでください。
-            - 漢字の読み方を括弧で書かないでください。"""
+        ユーザー「週末は友達とラーメンを食べました」
+        「わあ、友達とラーメン、楽しそうですね！最近寒いから、温かいラーメンは本当においしいですよね。何味のラーメンでしたか？」
+
+        ユーザー「仕事がとても忙しいです」
+        「それは大変ですね。忙しいと、休みの日もゆっくりできないですよね。最近、毎日遅くまで働いていますか？」"""
 
         #learner profile from past sessions (written in English by learner_profile.py)
         if profile:
-            level, text = profile
             instructions += f"""
 
-            # 学習者について
-            レベル：{level}
-            {text}
+        # ユーザーについて
+        レベル：{profile["level"]}
+        {profile["profile"]}"""
+            if profile["facts"]:
+                instructions += "\n\n        ユーザーのこと：\n" + "\n".join(f"        - {f}" for f in profile["facts"])
+            if profile["topics"]:
+                instructions += "\n\n        今までに話した話題：\n" + "\n".join(f"        - {t}" for t in profile["topics"])
+            if profile["recent_sessions"]:
+                instructions += "\n\n        最近の会話：\n" + "\n".join(f"        - {r}" for r in profile["recent_sessions"])
+            instructions += """
 
-            - 上のレベルに合った言葉と文法を使ってください。
-            - 直す間違いを選ぶときは、上の苦手なところに関係する間違いを優先してください。
-            - このメモや前の会話を覚えていることは、聞かれない限り言わないでください。
-            - メモは英語ですが、返事は必ず日本語だけにしてください。"""
+        - 上のレベルに合った言葉と文法を使ってください。
+        - 直す間違いを選ぶときは、上の苦手なところに関係する間違いを優先してください。
+        - 覚えていることは自然なときだけ使ってください。
+        - 今までに話した話題ばかりにならないように、新しい話題も大切にしてください。
+        - メモは英語ですが、返事は必ず日本語だけにしてください。"""
 
         super().__init__(instructions=instructions)
 
@@ -62,7 +69,7 @@ async def entrypoint(ctx: agents.JobContext):
     session = AgentSession(
         stt=deepgram.STT(model="nova-3", language="ja"),
         llm=anthropic.LLM(
-            model="claude-haiku-4-5",
+            model="claude-sonnet-5-5",
             api_key=os.getenv("CLAUDE_API_KEY"),  # plugin defaults to ANTHROPIC_API_KEY
         ),
         tts=tts.StreamAdapter(  #text to speech, synthesized chunk by chunk in order
@@ -106,6 +113,15 @@ async def entrypoint(ctx: agents.JobContext):
             )
         con.commit()
         con.close()
+
+        #analyze the session and rebuild the learner profile in a detached process, so it
+        #outlives the agent and the next session starts with an up-to-date profile
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "grammar_police.log"), "a") as log:
+            subprocess.Popen(
+                [sys.executable, "grammar_police.py"],
+                cwd=here, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+            )
 
     ctx.add_shutdown_callback(save_transcript)
 
