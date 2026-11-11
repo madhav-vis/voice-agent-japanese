@@ -2,7 +2,9 @@
 
 ### Quickstart for basic testing
 
-uv run python livekit_basic_agent.py console
+uv run python livekit_agent_conversation.py console
+uv run python grammar_police.py
+
 
 ### Features 
  - 3d avatar representation

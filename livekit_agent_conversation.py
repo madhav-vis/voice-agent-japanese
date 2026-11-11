@@ -1,12 +1,13 @@
 from dotenv import load_dotenv
 from livekit import agents
-from livekit.agents import Agent, AgentSession, RunContext
+from livekit.agents import Agent, AgentSession, RunContext, tts
 from livekit.agents.llm import function_tool
-from livekit.plugins import openai, silero
-from kotoba_stt import KotobaSTT
+from livekit.plugins import anthropic, deepgram, silero
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from datetime import datetime
-from voicevox_tts import VoicevoxTTS
-import os, asyncio, sqlite3
+from voicevox_tts import VoicevoxTTS, JapaneseSentenceTokenizer
+from learner_profile import load_profile
+import os, asyncio, sqlite3, subprocess, sys
 
 #load env
 load_dotenv(".env")
@@ -14,33 +15,80 @@ load_dotenv(".env")
 class Assistant(Agent):
     """Basic voice agent"""
 
-    def __init__(self):
-        super().__init__(
-            instructions="""あなたは親切なボイスアシスタントです。
-            自然な会話のように、簡潔に話してください。
-            必ず全て日本語で答えてください。英語のアルファベットやローマ字は絶対に使わないでください。
-            カタカナや和製英語は問題ありません。"""
-        )
+    def __init__(self, profile=None):
+        instructions = """# 役割
+        あなたは日本語を勉強している人の会話練習の相手です。
+        目的は、ユーザーが日本語でたくさん話せるようになることです。そのために、楽しい会話を続けることを一番大切にしてください。
+
+        # 話し方
+        - 必ず日本語だけで話してください。英語のアルファベットやローマ字は使わないでください。カタカナや和製英語は問題ありません。
+        - やさしい言葉を使って、です・ます体で話してください。
+        - 返事の長さは、普通の会話くらいにしてください。だいたい二文から四文です。声で聞くので、長すぎると学習者が疲れてしまいます。でも、短すぎると会話が冷たく感じます。
+        - ユーザーが話したことに、ちゃんと興味を持って反応してください。ユーザーの言葉の中の具体的なことを拾って、共感したり、驚いたり、ちょっとした感想や知識を言ったりしてください。
+        - 自分の経験は作らないでください。でも、一般的な感想や意見は言ってもいいです。
+        - 質問は毎回しなくても大丈夫です。質問するときは、ユーザーが話した内容に関係のある質問を一つだけしてください。
+        - 毎回同じ言葉で始めないでください。「いいですね」ばかりにならないように、反応を変えてください。
+
+        # 会話の例
+        ユーザー「昨日、映画を見るました」
+        「へえ、映画館ですか？それとも家で見ましたか？あ、『見るました』じゃなくて『見ました』ですね。」
+
+        ユーザー「週末は友達とラーメンを食べました」
+        「わあ、友達とラーメン、楽しそうですね！最近寒いから、温かいラーメンは本当においしいですよね。何味のラーメンでしたか？」
+
+        ユーザー「仕事がとても忙しいです」
+        「それは大変ですね。忙しいと、休みの日もゆっくりできないですよね。最近、毎日遅くまで働いていますか？」"""
+
+        #learner profile from past sessions (written in English by learner_profile.py)
+        if profile:
+            instructions += f"""
+
+        # ユーザーについて
+        レベル：{profile["level"]}
+        {profile["profile"]}"""
+            if profile["facts"]:
+                instructions += "\n\n        ユーザーのこと：\n" + "\n".join(f"        - {f}" for f in profile["facts"])
+            if profile["topics"]:
+                instructions += "\n\n        今までに話した話題：\n" + "\n".join(f"        - {t}" for t in profile["topics"])
+            if profile["recent_sessions"]:
+                instructions += "\n\n        最近の会話：\n" + "\n".join(f"        - {r}" for r in profile["recent_sessions"])
+            instructions += """
+
+        - 上のレベルに合った言葉と文法を使ってください。
+        - 直す間違いを選ぶときは、上の苦手なところに関係する間違いを優先してください。
+        - 覚えていることは自然なときだけ使ってください。
+        - 今までに話した話題ばかりにならないように、新しい話題も大切にしてください。
+        - メモは英語ですが、返事は必ず日本語だけにしてください。"""
+
+        super().__init__(instructions=instructions)
 
 async def entrypoint(ctx: agents.JobContext):
     """Entry point for the agent."""
 
     #Configure the voice pipeline
     session = AgentSession(
-        stt=KotobaSTT(device="mps"),
-        llm=openai.LLM(
-            model=os.getenv("LLM_CHOICE", "qwen2.5"),
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",  # Ollama doesn't require a real key, but the client needs a non-empty string
+        stt=deepgram.STT(model="nova-3", language="ja"),
+        llm=anthropic.LLM(
+            model="claude-sonnet-5-5",
+            api_key=os.getenv("CLAUDE_API_KEY"),  # plugin defaults to ANTHROPIC_API_KEY
         ),
-        tts=VoicevoxTTS(speaker=109),  #text to speech
+        tts=tts.StreamAdapter(  #text to speech, synthesized chunk by chunk in order
+            tts=VoicevoxTTS(speaker=1878365376, base_url="http://127.0.0.1:10101"),  # AivisSpeech コハク/ノーマル
+            sentence_tokenizer=JapaneseSentenceTokenizer(),
+        ),
         vad=silero.VAD.load(),
+        turn_handling={
+            #end-of-turn model reads the transcript, so a mid-sentence pause doesn't end the turn
+            "turn_detection": MultilingualModel(),
+            #learners pause to think; when the model says the sentence isn't done, wait up to 5s
+            "endpointing": {"min_delay": 0.5, "max_delay": 5.0},
+        },
     )
     
     #start the session
     await session.start(
         room = ctx.room,
-        agent=Assistant()
+        agent=Assistant(load_profile())
     )
 
     async def save_transcript():
@@ -55,7 +103,7 @@ async def entrypoint(ctx: agents.JobContext):
                 created_at  REAL
             )
         """)
-        session_id = ctx.room.name
+        session_id = ctx.job.id
         for msg in session.history.messages():
             if msg.role not in ("user", "assistant"):
                 continue
@@ -66,11 +114,23 @@ async def entrypoint(ctx: agents.JobContext):
         con.commit()
         con.close()
 
+        #analyze the session and rebuild the learner profile in a detached process, so it
+        #outlives the agent and the next session starts with an up-to-date profile
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "grammar_police.log"), "a") as log:
+            subprocess.Popen(
+                [sys.executable, "grammar_police.py"],
+                cwd=here, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+            )
+
     ctx.add_shutdown_callback(save_transcript)
 
     #generate intial greeting
     await session.generate_reply(
-        instructions="日本語でやさしい挨拶をして、どのようにお役に立てるか聞いてください。"
+        instructions="""短く挨拶して、日本語の会話練習を手伝えてうれしいと伝えてください。
+        質問はしないでください。
+        例：「こんにちは！今日は一緒に日本語で話しましょう。」
+        毎回、例と同じ言い方にしないでください。"""
     )
 
 if __name__ == "__main__":
