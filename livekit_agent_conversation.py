@@ -100,16 +100,21 @@ async def entrypoint(ctx: agents.JobContext):
                 role      TEXT,
                 text      TEXT,
                 interrupted INTEGER,
-                created_at  REAL
+                created_at  REAL,
+                room        TEXT
             )
         """)
+        #migrate tables created before the room name was stored (the browser UI looks sessions up by room)
+        columns = {name for (_, name, *_) in con.execute("PRAGMA table_info(transcripts)")}
+        if "room" not in columns:
+            con.execute("ALTER TABLE transcripts ADD COLUMN room TEXT")
         session_id = ctx.job.id
         for msg in session.history.messages():
             if msg.role not in ("user", "assistant"):
                 continue
             con.execute(
-                "INSERT INTO transcripts (session, role, text, interrupted, created_at) VALUES (?, ?, ?, ?, ?)",
-                (session_id, msg.role, msg.text_content, int(msg.interrupted), msg.created_at),
+                "INSERT INTO transcripts (session, role, text, interrupted, created_at, room) VALUES (?, ?, ?, ?, ?, ?)",
+                (session_id, msg.role, msg.text_content, int(msg.interrupted), msg.created_at, ctx.room.name),
             )
         con.commit()
         con.close()

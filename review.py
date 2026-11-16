@@ -12,8 +12,8 @@ def color(text, code):
     return f"\033[{code}m{text}\033[0m" if USE_COLOR else text
 
 
-def print_session(con, session, points):
-    """Print one analyzed session: score, each wrong turn with its correction and grammar points, patterns."""
+def session_review(con, session, points):
+    """One analyzed session as plain data: score, each wrong turn with its fixes and grammar points, patterns."""
     rows = con.execute("""
         SELECT f.transcript_id, f.status, COALESCE(f.text, t.text), f.corrected,
                f.type, f.span, f.correction, f.note, f.bunpro_key
@@ -29,30 +29,41 @@ def print_session(con, session, points):
     for tid, status, text, corrected, issue_type, span, correction, note, key in rows:
         turn = turns.setdefault(tid, {"status": status, "text": text, "corrected": corrected, "issues": []})
         if issue_type:
-            turn["issues"].append((issue_type, span, correction, note, key))
+            grammar, meaning, url = points.get(key, (None, None, None))
+            turn["issues"].append({
+                "type": issue_type, "span": span, "correction": correction, "note": note,
+                "bunpro_key": key if key in points else None, "grammar": grammar, "meaning": meaning, "url": url,
+            })
 
     judged = [t for t in turns.values() if t["status"] != "asr_unclear"]
-    correct = sum(t["status"] == "correct" for t in judged)
-    print(color(f"\n=== {date} ===", "1"), f"{correct}/{len(judged)} turns correct" if judged else "no user turns")
+    patterns = con.execute("SELECT patterns FROM grammar_sessions WHERE session = ?", (session,)).fetchone()
+    return {
+        "date": date,
+        "correct": sum(t["status"] == "correct" for t in judged),
+        "judged": len(judged),
+        "turns": [t for t in turns.values() if t["status"] in ("incorrect", "unnatural")],
+        "patterns": json.loads(patterns[0]) if patterns and patterns[0] else [],
+    }
 
-    for turn in turns.values():
-        if turn["status"] not in ("incorrect", "unnatural"):
-            continue
+
+def print_session(con, session, points):
+    """Print one analyzed session: score, each wrong turn with its correction and grammar points, patterns."""
+    r = session_review(con, session, points)
+    print(color(f"\n=== {r['date']} ===", "1"), f"{r['correct']}/{r['judged']} turns correct" if r["judged"] else "no user turns")
+
+    for turn in r["turns"]:
         label = "✗" if turn["status"] == "incorrect" else "△"
         print(f"\n{color(label, '31')} {turn['text']}")
         if turn["corrected"] and turn["corrected"] != turn["text"]:
             print(f"{color('✓', '32')} {color(turn['corrected'], '32')}")
-        for issue_type, span, correction, note, key in turn["issues"]:
-            print(f"   • {span} → {correction}  ({issue_type}) {note}")
-            if key in points:
-                grammar, meaning, url = points[key]
-                print(color(f"     文法 {key} {grammar} — {meaning}  {url}", "36"))
+        for i in turn["issues"]:
+            print(f"   • {i['span']} → {i['correction']}  ({i['type']}) {i['note']}")
+            if i["bunpro_key"]:
+                print(color(f"     文法 {i['bunpro_key']} {i['grammar']} — {i['meaning']}  {i['url']}", "36"))
 
-    patterns = con.execute("SELECT patterns FROM grammar_sessions WHERE session = ?", (session,)).fetchone()
-    patterns = json.loads(patterns[0]) if patterns and patterns[0] else []
-    if patterns:
+    if r["patterns"]:
         print("\nPatterns:")
-        for p in patterns:
+        for p in r["patterns"]:
             print(f"  - {p}")
 
 
