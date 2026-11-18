@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日本語 Practice</title>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --text: #1f1f1f; --muted: #75716b; --line: #e4e1db;
+    --accent: #c8553d; --accent-text: #fff; --me: #2f6f8f; --me-text: #fff; --agent: #ecebe7;
+    --good: #2e7d4f; --bad: #c0392b; --warn: #b7791f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161616; --panel: #1f1f1f; --text: #ececec; --muted: #9a958e; --line: #333;
+      --accent: #e0694f; --me: #3a83a8; --agent: #2a2a2a;
+      --good: #5bbf85; --bad: #ef6b5b; --warn: #e2a748;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0 auto 0 0; }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 999px; padding: 10px 26px;
+    background: var(--accent); color: var(--accent-text); cursor: pointer; min-width: 110px;
+  }
+  button.stop { background: var(--text); color: var(--bg); }
+  button:disabled { opacity: .5; cursor: default; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--line); font-size: 14px; color: var(--muted);
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); transition: background .15s, transform .15s; }
+  .dot.on { background: var(--good); transform: scale(1.3); }
+  .pill[data-state="speaking"] { color: var(--accent); border-color: var(--accent); }
+  .pill[data-state="thinking"] { color: var(--warn); border-color: var(--warn); }
+  .pill[data-state="listening"] { color: var(--good); border-color: var(--good); }
+  section {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px;
+  }
+  #captions { height: 52vh; min-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .empty { color: var(--muted); margin: auto; text-align: center; }
+  .bubble { max-width: 82%; padding: 8px 14px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; }
+  .bubble.agent { align-self: flex-start; background: var(--agent); border-bottom-left-radius: 4px; }
+  .bubble.me { align-self: flex-end; background: var(--me); color: var(--me-text); border-bottom-right-radius: 4px; }
+  .bubble .interim { opacity: .55; }
+  #review h2 { font-size: 17px; margin: 0 0 8px; }
+  .score { color: var(--muted); margin-bottom: 12px; }
+  .turn { border-top: 1px solid var(--line); padding: 12px 0; }
+  .turn:first-of-type { border-top: 0; }
+  .orig .mark { color: var(--bad); font-weight: 700; margin-right: 6px; }
+  .orig .mark.unnatural { color: var(--warn); }
+  .fixed { color: var(--good); }
+  .fixed .mark { font-weight: 700; margin-right: 6px; }
+  ul { margin: 6px 0 0; padding-left: 22px; }
+  li { margin: 4px 0; font-size: 15px; }
+  .type { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-left: 4px; }
+  .note { color: var(--muted); }
+  .bunpro { display: block; font-size: 14px; }
+  a { color: var(--me); }
+  .muted { color: var(--muted); }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; vertical-align: -1px; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .meter { display: flex; align-items: center; gap: 10px; margin: -6px 0 14px; font-size: 13px; color: var(--muted); }
+  .meter div { flex: 1; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--good); transition: width .06s linear; }
+  [hidden] { display: none !important; }
+
+  /* ---------- statistics ---------- */
+  :root {
+    --heat-0: #ebe8e2; --heat-1: #f2c4b5; --heat-2: #e6927a; --heat-3: #c8553d; --heat-4: #8f3420;
+    /* issue types: categorical slots in fixed order */
+    --t-particle: #2a78d6; --t-wa_ga: #eb6834; --t-conjugation: #1baf7a; --t-word_choice: #eda100;
+    --t-register: #e87ba4; --t-filler: #008300; --t-other: #6250d6;
+    /* JLPT levels: ordinal blue ramp, N5 light -> N1 dark */
+    --lv-N5: #86b6ef; --lv-N4: #5598e7; --lv-N3: #2a78d6; --lv-N2: #1c5cab; --lv-N1: #104281;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --heat-0: #2a2a2a; --heat-1: #5a2e24; --heat-2: #8f4130; --heat-3: #c85a42; --heat-4: #f08a6e;
+      --t-particle: #3987e5; --t-wa_ga: #d95926; --t-conjugation: #199e70; --t-word_choice: #c98500;
+      --t-register: #d55181; --t-filler: #0ca30c; --t-other: #9085e9;
+      --lv-N5: #184f95; --lv-N4: #2a78d6; --lv-N3: #5598e7; --lv-N2: #86b6ef; --lv-N1: #b7d3f6;
+    }
+  }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); padding: 9px 22px; }
+  button.secondary.active { border-color: var(--text); }
+  #statsView h2 { font-size: 17px; margin: 0 0 4px; }
+  #statsView h3 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; color: var(--muted); }
+  #statsView h3:first-of-type { margin-top: 10px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
+  .heat-wrap { overflow-x: auto; padding-bottom: 4px; }
+  .heat-wrap svg { display: block; }
+  .heat-legend { display: flex; align-items: center; gap: 3px; justify-content: flex-end; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .heat-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .heat-legend span { margin: 0 4px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .tile { text-align: center; padding: 8px 4px; border-radius: 10px; background: var(--bg); }
+  .tile b { display: block; font-size: 20px; line-height: 1.3; }
+  .tile span { font-size: 12px; color: var(--muted); }
+  @media (max-width: 520px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
+  svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+  .grid { stroke: var(--line); stroke-width: 1; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); margin: 2px 0 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .legend i.line { height: 2px; vertical-align: 3px; width: 14px; }
+  .spots { list-style: none; padding: 0; margin: 0; }
+  .spots li { display: flex; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); margin: 0; }
+  .spots li:first-child { border-top: 0; }
+  .spots .rank { color: var(--muted); width: 1.4em; text-align: right; flex: none; }
+  .spots .what { flex: 1; min-width: 0; }
+  .spots .ex { display: block; font-size: 13px; color: var(--muted); }
+  .spots .n { color: var(--muted); font-size: 13px; flex: none; text-align: right; }
+  .chip { display: inline-block; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 4px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips .topic { font-size: 13px; background: var(--bg); border-radius: 999px; padding: 3px 10px; }
+  .won { color: var(--good); border-color: var(--good); }
+  .lvl-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 13px; }
+  .lvl-row .m { width: 76px; color: var(--muted); flex: none; white-space: nowrap; }
+  .lvl-row .bar { flex: 1; display: flex; gap: 2px; height: 14px; }
+  .lvl-row .bar i { display: block; height: 100%; }
+  .lvl-row .bar i:first-child { border-radius: 4px 0 0 4px; }
+  .lvl-row .bar i:last-child { border-radius: 0 4px 4px 0; }
+  .lvl-row .bar i:only-child { border-radius: 4px; }
+  .lvl-row .t { width: 2.5em; color: var(--muted); text-align: right; flex: none; }
+  #tip {
+    position: fixed; pointer-events: none; z-index: 10; background: var(--text); color: var(--bg);
+    font-size: 13px; padding: 5px 9px; border-radius: 8px; white-space: nowrap; transform: translate(-50%, calc(-100% - 10px));
+  }
+  /* per-session card */
+  .card-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+  .card-row .tile b { font-size: 18px; }
+  .delta { font-size: 12px; }
+  .delta.up { color: var(--good); }
+  .delta.down { color: var(--bad); }
+  .longest { font-size: 14px; color: var(--muted); margin: 0 0 6px; }
+  .longest q { color: var(--text); quotes: "「" "」"; }
+  .todo { font-size: 14px; margin: 0 0 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>日本語 会話練習</h1>
+    <span class="pill" id="pill" data-state="idle"><span class="dot" id="micDot" title="you are speaking"></span><span id="pillText">待機中</span></span>
+    <button id="btn">Start</button>
+    <button id="statsBtn" class="secondary" aria-pressed="false">Statistics</button>
+  </header>
+  <div class="meter" hidden title="microphone level"><span>mic</span><div><i id="micLevel"></i></div></div>
+
+  <div id="practiceView">
+    <section id="captions"><p class="empty" id="emptyHint">Press Start to begin</p></section>
+    <section id="review" hidden></section>
+  </div>
+
+  <div id="statsView" hidden></div>
+</main>
+<div id="tip" hidden></div>
+
+<script>
+const { Room, RoomEvent, ParticipantEvent, Track, ParticipantKind } = LivekitClient;
+
+const btn = document.getElementById("btn");
+const pill = document.getElementById("pill");
+const pillText = document.getElementById("pillText");
+const micDot = document.getElementById("micDot");
+const captions = document.getElementById("captions");
+const reviewEl = document.getElementById("review");
+
+const STATE_LABELS = {
+  idle: "待機中", connecting: "接続中…", initializing: "準備中…",
+  listening: "聞いています", thinking: "考えています", speaking: "話しています", ended: "終了",
+};
+
+let room = null;
+let roomName = null;
+let phase = "idle";          // idle | connecting | live | reviewing
+const bubbles = new Map();   // segment id -> element
+
+function setState(state) {
+  pill.dataset.state = state;
+  pillText.textContent = STATE_LABELS[state] || state;
+}
+
+function setPhase(next) {
+  phase = next;
+  const onStats = !document.getElementById("statsView").hidden;
+  // Start only works from the practice view; a live session can still be stopped from anywhere
+  btn.disabled = next === "connecting" || next === "reviewing" || (onStats && next !== "live");
+  btn.title = onStats && next !== "live" ? "Go back to Practice to start a session" : "";
+  btn.textContent = next === "live" ? "Stop" : next === "connecting" ? "..." : "Start";
+  btn.classList.toggle("stop", next === "live");
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---------- captions ----------
+// STT finalizes each phrase as its own segment; consecutive segments from the same speaker are merged
+// into one bubble (a turn) until the other side speaks.
+let turn = null;  // { isMe, el, segs: Map(segmentId -> {text, final}) }
+
+function showCaption(segmentId, text, isMe, final) {
+  document.getElementById("emptyHint")?.remove();
+  let t = bubbles.get(segmentId);
+  if (!t) {
+    if (!turn || turn.isMe !== isMe) {
+      const el = document.createElement("div");
+      el.className = "bubble " + (isMe ? "me" : "agent");
+      captions.appendChild(el);
+      turn = { isMe, el, segs: new Map() };
+    }
+    t = turn;
+    bubbles.set(segmentId, t);
+  }
+  t.segs.set(segmentId, { text, final: final || !isMe });
+  t.el.innerHTML = [...t.segs.values()]
+    .map(s => `<span${s.final ? "" : ' class="interim"'}>${esc(s.text)}</span>`).join("");
+  const nearBottom = captions.scrollHeight - captions.scrollTop - captions.clientHeight < 120;
+  if (nearBottom) captions.scrollTop = captions.scrollHeight;
+}
+
+// The agent sends one stream per segment with text deltas; the user's speech arrives as a new
+// stream per update with the full text so far. Accumulating per stream and replacing per segment handles both.
+function onTranscription(reader, participantInfo) {
+  const attrs = reader.info.attributes || {};
+  const segmentId = attrs["lk.segment_id"] || reader.info.id;
+  const isMe = participantInfo.identity === room?.localParticipant.identity;
+  (async () => {
+    let text = "";
+    for await (const chunk of reader) {
+      text += chunk;
+      showCaption(segmentId, text, isMe, attrs["lk.transcription_final"] === "true");
+    }
+    // the final flag can arrive on the closing header
+    const finalAttrs = reader.info.attributes || attrs;
+    showCaption(segmentId, text, isMe, finalAttrs["lk.transcription_final"] === "true" || !isMe);
+  })().catch(err => console.warn("caption stream", err));
+}
+
+// ---------- session ----------
+async function start() {
+  setPhase("connecting");
+  setState("connecting");
+  reviewEl.hidden = true;
+  captions.innerHTML = "";
+  bubbles.clear();
+  turn = null;
+
+  try {
+    const res = await fetch("/api/token");
+    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+    const { url, token, room: name } = await res.json();
+    roomName = name;
+
+    room = new Room({ adaptiveStream: true, dynacast: true });
+    room.registerTextStreamHandler("lk.transcription", onTranscription);
+
+    room.on(RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === Track.Kind.Audio) {
+        const el = track.attach();
+        el.dataset.lk = "1";
+        document.body.appendChild(el);
+      }
+    });
+    room.on(RoomEvent.TrackUnsubscribed, (track) => track.detach().forEach(el => el.remove()));
+    room.on(RoomEvent.ParticipantAttributesChanged, (changed, participant) => {
+      if (participant.kind === ParticipantKind.AGENT && changed["lk.agent.state"]) {
+        setState(changed["lk.agent.state"]);
+      }
+    });
+    room.on(RoomEvent.ParticipantConnected, (p) => {
+      if (p.kind === ParticipantKind.AGENT) setState(p.attributes["lk.agent.state"] || "initializing");
+    });
+    room.on(RoomEvent.Disconnected, () => ended());
+
+    // ask for the mic before joining, so a denied/missing mic is reported clearly instead of a silent session
+    let micTrack;
+    try {
+      micTrack = await LivekitClient.createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+    } catch (err) {
+      throw new Error(`microphone unavailable (${err.name}: ${err.message}). Allow mic access for this site in the browser, ` +
+        `and for the browser in System Settings → Privacy & Security → Microphone`);
+    }
+    showMicLevel(micTrack.mediaStreamTrack);
+
+    await room.connect(url, token);
+    await room.startAudio();  // inside the click, so autoplay is allowed
+    await room.localParticipant.publishTrack(micTrack, { source: Track.Source.Microphone });
+    room.localParticipant.on(ParticipantEvent.IsSpeakingChanged, (speaking) => micDot.classList.toggle("on", speaking));
+
+    // agent may already be in the room
+    const agent = [...room.remoteParticipants.values()].find(p => p.kind === ParticipantKind.AGENT);
+    setState(agent ? (agent.attributes["lk.agent.state"] || "initializing") : "initializing");
+    setPhase("live");
+  } catch (err) {
+    console.error(err);
+    stopMicLevel();
+    if (room) { const r = room; room = null; phase = "idle"; await r.disconnect(); }  // don't leave a half-open session
+    setState("idle");
+    setPhase("idle");
+    reviewEl.hidden = false;
+    reviewEl.innerHTML = err.message.startsWith("microphone")
+      ? `<p class="muted">Couldn't start: ${esc(err.message)}.</p>`
+      : `<p class="muted">Couldn't connect: ${esc(err.message)}.<br>
+      Is <code>livekit-server --dev</code> running, and the agent in <code>dev</code> mode?</p>`;
+  }
+}
+
+// ---------- mic level meter (shows the browser is really capturing audio) ----------
+let meter = null;
+function showMicLevel(mediaStreamTrack) {
+  stopMicLevel();
+  const ctx = new AudioContext();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  ctx.createMediaStreamSource(new MediaStream([mediaStreamTrack])).connect(analyser);
+  const buf = new Uint8Array(analyser.fftSize);
+  const bar = document.getElementById("micLevel");
+  bar.parentElement.hidden = false;
+  meter = { ctx, raf: 0 };
+  const tick = () => {
+    analyser.getByteTimeDomainData(buf);
+    let peak = 0;
+    for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
+    bar.style.width = Math.min(100, peak / 128 * 250) + "%";
+    meter.raf = requestAnimationFrame(tick);
+  };
+  tick();
+}
+function stopMicLevel() {
+  if (!meter) return;
+  cancelAnimationFrame(meter.raf);
+  meter.ctx.close();
+  meter = null;
+  document.getElementById("micLevel").parentElement.hidden = true;
+}
+
+async function stop() {
+  if (room) await room.disconnect();  // fires Disconnected -> ended()
+}
+
+function ended() {
+  if (phase !== "live" && phase !== "connecting") return;
+  document.querySelectorAll("audio[data-lk]").forEach(el => el.remove());
+  stopMicLevel();
+  micDot.classList.remove("on");
+  setState("ended");
+  room = null;
+  setPhase("reviewing");
+  pollReview(roomName);
+}
+
+// ---------- review ----------
+const POLL_MS = 3000, POLL_LIMIT_MS = 3 * 60 * 1000;
+
+async function pollReview(name) {
+  const startedAt = Date.now();
+  reviewEl.hidden = false;
+  while (Date.now() - startedAt < POLL_LIMIT_MS) {
+    let data;
+    try {
+      data = await (await fetch("/api/review?room=" + encodeURIComponent(name))).json();
+    } catch (err) {
+      data = { status: "error", error: err.message };
+    }
+    if (data.status === "done") {
+      renderReview(data);
+      setPhase("idle");
+      return;
+    }
+    const msg = data.status === "saving" ? "Saving the conversation..."
+      : data.status === "analyzing" ? "Checking your grammar..."
+      : "Waiting for the server... " + esc(data.error || "");
+    reviewEl.innerHTML = `<p class="muted"><span class="spinner"></span>${msg}</p>`;
+    await new Promise(r => setTimeout(r, POLL_MS));
+  }
+  reviewEl.innerHTML = `<p class="muted">The review is taking longer than expected. Check <code>grammar_police.log</code>.
+    A failed analysis is retried the next time <code>grammar_police.py</code> runs.</p>`;
+  setPhase("idle");
+}
+
+function renderReview(r) {
+  if (!r.judged) {
+    reviewEl.innerHTML = `<h2>Review · ${esc(r.date)}</h2><p class="muted">No speech to review in this session.</p>`;
+    return;
+  }
+  const turns = r.turns.map(t => {
+    const mark = t.status === "incorrect" ? "✗" : "△";
+    const fixed = t.corrected && t.corrected !== t.text
+      ? `<div class="fixed"><span class="mark">✓</span>${esc(t.corrected)}</div>` : "";
+    const issues = t.issues.map(i => `<li>
+        ${esc(i.span)} → <b>${esc(i.correction)}</b><span class="type">${esc(i.type)}</span>
+        <span class="note">${esc(i.note)}</span>
+        ${i.bunpro_key ? `<a class="bunpro" href="${esc(i.url)}" target="_blank" rel="noopener">文法 ${esc(i.bunpro_key.split("-")[0])} ${esc(i.grammar)} — ${esc(i.meaning)}</a>` : ""}
+      </li>`).join("");
+    return `<div class="turn">
+        <div class="orig"><span class="mark ${t.status}">${mark}</span>${esc(t.text)}</div>
+        ${fixed}
+        ${issues ? `<ul>${issues}</ul>` : ""}
+      </div>`;
+  }).join("");
+  const patterns = r.patterns.length
+    ? `<h2 style="margin-top:16px">Patterns</h2><ul>${r.patterns.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : "";
+  reviewEl.innerHTML = `<h2>Review · ${esc(r.date)}</h2>
+    ${r.card ? sessionCard(r.card, r) : `<div class="score">${r.correct}/${r.judged} turns correct</div>`}
+    ${turns || `<p class="muted">No mistakes this time. 🎉</p>`}
+    ${patterns}`;
+}
+
+function delta(value, avg, fmt) {
+  if (value == null || avg == null) return "";
+  const d = value - avg;
+  if (Math.abs(d) < 1e-9) return `<span class="delta">= your average</span>`;
+  return `<span class="delta ${d > 0 ? "up" : "down"}">${d > 0 ? "↑" : "↓"} ${fmt(Math.abs(d))} vs avg</span>`;
+}
+
+function sessionCard(c, r) {
+  const pct = v => Math.round(v * 100) + "%";
+  return `<div class="card-row">
+      <div class="tile"><b>${c.minutes}</b><span>min</span></div>
+      <div class="tile"><b>${c.chars.toLocaleString()}</b><span>characters</span><br>${delta(c.chars, c.avg_chars, v => Math.round(v))}</div>
+      <div class="tile"><b>${r.correct}/${r.judged}</b><span>correct</span><br>${delta(c.rate, c.avg_rate, pct)}</div>
+    </div>
+    ${c.longest ? `<p class="longest">Longest sentence: <q>${esc(c.longest)}</q></p>` : ""}
+    ${c.review ? `<p class="todo">Review this: <a href="${esc(c.review.url)}" target="_blank" rel="noopener">${esc(c.review.level)} ${esc(c.review.grammar)}</a> <span class="muted">— ${esc(c.review.meaning)}</span></p>` : ""}`;
+}
+
+// ---------- statistics view ----------
+const statsBtn = document.getElementById("statsBtn");
+const statsView = document.getElementById("statsView");
+const practiceView = document.getElementById("practiceView");
+const tip = document.getElementById("tip");
+
+const TYPES = [  // fixed categorical order: color follows the type, never its rank
+  ["particle", "Particle"], ["wa_ga", "は / が"], ["conjugation", "Conjugation"], ["word_choice", "Word choice"],
+  ["register", "Register"], ["filler", "Filler"], ["other", "Other"],
+];
+const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const parseDay = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const shortDay = s => { const d = parseDay(s); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
+const plural = (n, w) => `${n.toLocaleString()} ${w}${n === 1 ? "" : "s"}`;
+const emptyNote = msg => `<p class="muted" style="font-size:14px">${msg}</p>`;
+
+function showView(stats) {
+  statsView.hidden = !stats;
+  practiceView.hidden = stats;
+  statsBtn.classList.toggle("active", stats);
+  statsBtn.setAttribute("aria-pressed", stats);
+  statsBtn.textContent = stats ? "Practice" : "Statistics";
+  setPhase(phase);  // grey out Start while on the stats view
+  if (stats) loadStats();
+}
+statsBtn.addEventListener("click", () => { location.hash = statsView.hidden ? "stats" : ""; });
+window.addEventListener("hashchange", () => showView(location.hash === "#stats"));
+
+// one shared hover tooltip for every element with data-tip
+document.addEventListener("pointerover", e => {
+  const el = e.target.closest?.("[data-tip]");
+  if (!el) { tip.hidden = true; return; }
+  tip.textContent = el.dataset.tip;
+  tip.hidden = false;
+});
+document.addEventListener("pointermove", e => { tip.style.left = e.clientX + "px"; tip.style.top = e.clientY + "px"; });
+
+async function loadStats() {
+  statsView.innerHTML = `<section><p class="muted"><span class="spinner"></span>Loading statistics...</p></section>`;
+  try {
+    const res = await fetch("/api/stats");
+    const s = await res.json();
+    if (!res.ok) throw new Error(s.error || res.statusText);
+    renderStats(s);
+  } catch (err) {
+    statsView.innerHTML = `<section><p class="muted">Couldn't load statistics: ${esc(err.message)}</p></section>`;
+  }
+}
+
+function renderStats(s) {
+  const t = s.totals;
+  const weeks = s.weekly;
+  const weekLabel = w => shortDay(w.week);
+  statsView.innerHTML = `
+    <section>
+      <h2>Practice</h2>
+      <p class="sub">${t.first_day ? `${plural(t.sessions, "session")} · ${t.minutes} min · ${t.chars.toLocaleString()} characters spoken since ${shortDay(t.first_day)}` : "No practice yet"}</p>
+      ${heatmap(s.heatmap, s.generated)}
+      <div class="tiles">
+        <div class="tile"><b>${s.heatmap.daily_average}</b><span>daily average (turns)</span></div>
+        <div class="tile"><b>${s.heatmap.days_learned_pct}%</b><span>days learned</span></div>
+        <div class="tile"><b>${plural(s.heatmap.longest_streak, "day")}</b><span>longest streak</span></div>
+        <div class="tile"><b>${plural(s.heatmap.current_streak, "day")}</b><span>current streak</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Habit &amp; volume</h2>
+      <h3>Characters spoken per week</h3>
+      ${weeks.length ? barChart(weeks, {
+        value: w => w.chars, label: weekLabel, color: "var(--me)",
+        tip: w => `Week of ${weekLabel(w)} · ${w.chars.toLocaleString()} characters · ${w.minutes} min`,
+      }) : emptyNote("Practice a few sessions to see your weekly volume.")}
+    </section>
+
+    <section>
+      <h2>Accuracy</h2>
+      <h3>Correct turns per session</h3>
+      ${s.correct_rate.length ? `<div class="legend"><span><i style="background:var(--muted);opacity:.5;border-radius:50%"></i>each session</span><span><i class="line" style="background:var(--good)"></i>${s.correct_rate.length > 1 ? "3-session average" : ""}</span></div>` +
+        lineChart(s.correct_rate, {
+          max: 1, fmt: v => Math.round(v * 100) + "%", label: p => shortDay(p.date),
+          dots: { value: p => p.rate, color: "var(--muted)", tip: p => `${shortDay(p.date)} · ${Math.round(p.rate * 100)}% of ${plural(p.turns, "turn")} correct` },
+          line: { value: p => p.rolling, color: "var(--good)" },
+        }) : emptyNote("Correct-turn rate appears after your first analyzed session.")}
+      <h3>Incorrect vs unnatural per week</h3>
+      ${weeks.some(w => w.incorrect + w.unnatural) ?
+        legend([["✗ Incorrect", "var(--bad)"], ["△ Unnatural", "var(--warn)"]]) +
+        stackedBars(weeks, [["incorrect", "var(--bad)"], ["unnatural", "var(--warn)"]], {
+          get: (w, k) => w[k], label: weekLabel,
+          tip: w => `Week of ${weekLabel(w)} · ✗ ${w.incorrect} incorrect · △ ${w.unnatural} unnatural · ✓ ${w.correct} correct`,
+        }) : emptyNote("No mistakes recorded yet.")}
+      <h3>Mistakes per 100 characters</h3>
+      ${weeks.some(w => w.mistakes_per_100 != null) ? lineChart(weeks, {
+        fmt: v => String(+v.toFixed(1)), label: weekLabel,
+        line: { value: w => w.mistakes_per_100, color: "var(--accent)", dots: true,
+                tip: w => `Week of ${weekLabel(w)} · ${w.mistakes_per_100} mistakes per 100 characters (${w.issues} in ${w.graded_chars.toLocaleString()})` },
+      }) : emptyNote("Needs analyzed sessions.")}
+    </section>
+
+    <section>
+      <h2>Weak spots</h2>
+      <h3>What to review (recent mistakes count more)</h3>
+      ${s.weak_spots.length ? `<ul class="spots">${s.weak_spots.map((w, i) => `<li>
+          <span class="rank">${i + 1}</span>
+          <span class="what">${w.key
+            ? `<span class="chip">${esc(w.level)}</span><a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.grammar)}</a> <span class="muted">— ${esc(w.meaning)}</span>`
+            : `<span class="chip">type</span>${esc(typeName(w.type))}`}
+            ${w.example ? `<span class="ex">e.g. ${esc(w.example)}</span>` : ""}</span>
+          <span class="n">×${w.count}<br>${shortDay(w.last_seen)}</span>
+        </li>`).join("")}</ul>` : emptyNote("No mistakes recorded yet.")}
+      <h3>Mistakes by type per week</h3>
+      ${typeChart(weeks)}
+      <h3>Fixed</h3>
+      ${!s.fixed_enough_data ? emptyNote("Needs a few more sessions: grammar points you used to miss and haven't missed in your last 3 sessions show up here.")
+        : s.fixed.length ? `<div class="chips">${s.fixed.map(f => `<a class="chip won" href="${esc(f.url)}" target="_blank" rel="noopener" data-tip="Missed ${f.misses}× · last on ${shortDay(f.last_missed)}">✓ ${esc(f.level)} ${esc(f.grammar)}</a>`).join("")}</div>`
+        : emptyNote("Nothing fixed yet. Points you used to miss and haven't missed in your last 3 sessions will appear here.")}
+    </section>
+
+    <section>
+      <h2>Level &amp; range</h2>
+      <h3>JLPT level of the grammar in your mistakes</h3>
+      ${s.levels.length ? legend(LEVELS.map(l => [l, `var(--lv-${l})`])) + s.levels.map(m => {
+        const total = LEVELS.reduce((a, l) => a + m[l], 0);
+        const [y, mo] = m.month.split("-");
+        return `<div class="lvl-row"><span class="m">${MONTHS[mo - 1]} ${y}</span><span class="bar">${LEVELS.filter(l => m[l]).map(l =>
+          `<i style="flex:${m[l]};background:var(--lv-${l})" data-tip="${MONTHS[mo - 1]} · ${l}: ${m[l]} of ${total}"></i>`).join("")}</span><span class="t">${total}</span></div>`;
+      }).join("") + `<p class="sub" style="margin-top:8px">Everyday spoken Japanese is mostly N5–N4 grammar (roughly two-thirds or more), even in polite speech. N3–N2 adds nuance, hedging and keigo (お〜になる, いたす, 〜かと思います). N1 is mostly written or formal, so it's rare in conversation. Mostly N5–N4 here is normal; N3–N2 showing up means you're reaching for more nuance.</p>` : emptyNote("No Bunpro-tagged mistakes yet.")}
+      <h3>Average turn length (characters)</h3>
+      ${s.turn_length.length ? lineChart(s.turn_length, {
+        fmt: v => Math.round(v), label: p => shortDay(p.date),
+        line: { value: p => p.avg, color: "var(--me)", dots: true,
+                tip: p => `${shortDay(p.date)} · ${p.avg} characters per turn (${plural(p.turns, "turn")})` },
+      }) : emptyNote("Needs analyzed sessions.")}
+      <h3>Topics covered · ${s.topics.length}</h3>
+      ${s.topics.length ? `<div class="chips">${s.topics.map(x => `<span class="topic">${esc(x)}</span>`).join("")}</div>` : emptyNote("Topics appear once your learner profile is built.")}
+    </section>`;
+  const wrap = statsView.querySelector(".heat-wrap");
+  if (wrap) wrap.scrollLeft = wrap.scrollWidth;  // newest week in view
+}
+
+const typeName = k => (TYPES.find(([key]) => key === k) || [k, k])[1];
+
+function legend(items) {
+  return `<div class="legend">${items.map(([name, color]) => `<span><i style="background:${color}"></i>${esc(name)}</span>`).join("")}</div>`;
+}
+
+function typeChart(weeks) {
+  const totals = Object.fromEntries(TYPES.map(([k]) => [k, weeks.reduce((a, w) => a + (w.issues_by_type[k] || 0), 0)]));
+  const present = TYPES.filter(([k]) => totals[k]);
+  if (!present.length) return emptyNote("No mistakes recorded yet.");
+  return legend(present.map(([k, name]) => [`${name} ${totals[k]}`, `var(--t-${k})`])) +
+    stackedBars(weeks, present.map(([k]) => [k, `var(--t-${k})`]), {
+      get: (w, k) => w.issues_by_type[k] || 0, label: w => shortDay(w.week),
+      tip: w => `Week of ${shortDay(w.week)} · ` + (present.filter(([k]) => w.issues_by_type[k]).map(([k, n]) => `${n} ${w.issues_by_type[k]}`).join(" · ") || "none"),
+    });
+}
+
+// ---------- heatmap (review-heatmap style: weeks as columns, Mon..Sun as rows) ----------
+function heatmap(h, generated) {
+  const CELL = 10, GAP = 2, PITCH = CELL + GAP, LEFT = 26, TOP = 16, WEEKS = 53;
+  const today = parseDay(generated);
+  const start = new Date(today);
+  start.setDate(start.getDate() - ((today.getDay() + 6) % 7) - (WEEKS - 1) * 7);  // Monday, 52 weeks back
+  const counts = Object.values(h.days).map(d => d.turns).sort((a, b) => a - b);
+  const q = p => counts[Math.min(counts.length - 1, Math.floor(p * counts.length))] || 0;
+  const cuts = [q(0.25), q(0.5), q(0.75)];
+  const shade = n => !n ? 0 : n <= cuts[0] ? 1 : n <= cuts[1] ? 2 : n <= cuts[2] ? 3 : 4;
+
+  let cells = "", months = "", lastMonth = -1, lastLabelW = -99;
+  for (let w = 0; w < WEEKS; w++) {
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(start);
+      day.setDate(start.getDate() + w * 7 + d);
+      if (day > today) break;
+      if (d === 0 && day.getMonth() !== lastMonth) {
+        lastMonth = day.getMonth();
+        // skip a label that would collide (the partial first month, or the last column)
+        if (w > 0 && w < WEEKS - 2 && w - lastLabelW >= 3) {
+          months += `<text x="${LEFT + w * PITCH}" y="10">${MONTHS[lastMonth]}</text>`;
+          lastLabelW = w;
+        }
+      }
+      const key = ymd(day), v = h.days[key];
+      const tipText = `${shortDay(key)} · ${v ? `${plural(v.turns, "turn")} · ${v.minutes} min` : "no practice"}`;
+      const ring = key === generated ? ` stroke="var(--text)" stroke-width="1"` : "";
+      cells += `<rect x="${LEFT + w * PITCH}" y="${TOP + d * PITCH}" width="${CELL}" height="${CELL}" rx="2" fill="var(--heat-${shade(v?.turns)})"${ring} data-tip="${tipText}"/>`;
+    }
+  }
+  const days = ["Mon", "", "Wed", "", "Fri", "", ""].map((l, i) => l && `<text x="0" y="${TOP + i * PITCH + 9}">${l}</text>`).join("");
+  const W = LEFT + WEEKS * PITCH, H = TOP + 7 * PITCH;
+  return `<div class="heat-wrap"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Practice calendar">${months}${days}${cells}</svg></div>
+    <div class="heat-legend"><span>Less</span>${[0, 1, 2, 3, 4].map(i => `<i style="background:var(--heat-${i})"></i>`).join("")}<span>More</span></div>`;
+}
+
+// ---------- small SVG charts (one y-axis, recessive grid, rounded data-ends on the baseline) ----------
+const CW = 680, CH = 170, PAD = { l: 36, r: 8, t: 8, b: 22 };
+
+function niceMax(v) {  // 4 gridline steps, each a round number
+  if (v <= 0) return 4;
+  const s = v / 4, p = 10 ** Math.floor(Math.log10(s)), n = s / p;
+  return 4 * (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+}
+
+function frame(max, fmt, items, label) {
+  const ih = CH - PAD.t - PAD.b, iw = CW - PAD.l - PAD.r;
+  let g = "";
+  for (let i = 0; i <= 4; i++) {
+    const y = PAD.t + ih - (ih * i) / 4;
+    g += `<line class="grid" x1="${PAD.l}" x2="${CW - PAD.r}" y1="${y}" y2="${y}"/><text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end">${fmt((max * i) / 4)}</text>`;
+  }
+  const every = Math.max(1, Math.ceil(items.length / 8));
+  const step = iw / items.length;
+  items.forEach((it, i) => {
+    if (i % every === 0) g += `<text x="${PAD.l + step * (i + 0.5)}" y="${CH - 6}" text-anchor="middle">${esc(label(it))}</text>`;
+  });
+  return { g, ih, iw, step, y: v => PAD.t + ih - (ih * v) / max };
+}
+
+function topRounded(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h);
+  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+}
+
+function barChart(items, o) {
+  const max = niceMax(Math.max(...items.map(o.value)));
+  const f = frame(max, v => Math.round(v).toLocaleString(), items, o.label);
+  const bw = Math.min(28, f.step * 0.6);
+  const bars = items.map((it, i) => {
+    const v = o.value(it), x = PAD.l + f.step * (i + 0.5) - bw / 2, y = f.y(v);
+    const hit = `<rect x="${PAD.l + f.step * i}" y="${PAD.t}" width="${f.step}" height="${f.ih}" fill="transparent" data-tip="${esc(o.tip(it))}"/>`;
+    return (v ? `<path d="${topRounded(x, y, bw, PAD.t + f.ih - y, 4)}" fill="${o.color}"/>` : "") + hit;
+  }).join("");
+  return `<svg class="chart" viewBox="0 0 ${CW} ${CH}">${f.g}${bars}</svg>`;
+}
+
+function stackedBars(items, series, o) {
+  const max = niceMax(Math.max(1, ...items.map(it => series.reduce((a, [k]) => a + o.get(it, k), 0))));
+  const f = frame(max, v => Math.round(v), items, o.label);
+  const bw = Math.min(28, f.step * 0.6);
+  const bars = items.map((it, i) => {
+    const x = PAD.l + f.step * (i + 0.5) - bw / 2;
+    let base = 0, out = "";
+    const segs = series.filter(([k]) => o.get(it, k) > 0);
+    segs.forEach(([k, color], j) => {
+      const v = o.get(it, k), y0 = f.y(base), y1 = f.y(base + v);
+      const h = Math.max(1, y0 - y1 - (j ? 2 : 0));  // 2px surface gap between segments
+      out += j === segs.length - 1
+        ? `<path d="${topRounded(x, y1, bw, h, 4)}" fill="${color}"/>`
+        : `<rect x="${x}" y="${y1}" width="${bw}" height="${h}" fill="${color}"/>`;
+      base += v;
+    });
+    return out + `<rect x="${PAD.l + f.step * i}" y="${PAD.t}" width="${f.step}" height="${f.ih}" fill="transparent" data-tip="${esc(o.tip(it))}"/>`;
+  }).join("");
+  return `<svg class="chart" viewBox="0 0 ${CW} ${CH}">${f.g}${bars}</svg>`;
+}
+
+function lineChart(items, o) {
+  const vals = [o.line && items.map(o.line.value), o.dots && items.map(o.dots.value)].flat().filter(v => v != null);
+  const max = o.max ?? niceMax(Math.max(...vals));
+  const f = frame(max, o.fmt, items, o.label);
+  const x = i => PAD.l + f.step * (i + 0.5);
+  let out = "";
+  if (o.dots) items.forEach((it, i) => {
+    out += `<circle cx="${x(i)}" cy="${f.y(o.dots.value(it))}" r="4" fill="${o.dots.color}" opacity=".45"/>`;
+  });
+  if (o.line) {
+    let d = "", pen = false;
+    items.forEach((it, i) => {
+      const v = o.line.value(it);
+      if (v == null) { pen = false; return; }
+      d += `${pen ? "L" : "M"}${x(i)},${f.y(v)}`;
+      pen = true;
+    });
+    out += `<path d="${d}" fill="none" stroke="${o.line.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    if (o.line.dots) items.forEach((it, i) => {
+      const v = o.line.value(it);
+      if (v != null) out += `<circle cx="${x(i)}" cy="${f.y(v)}" r="4" fill="${o.line.color}" stroke="var(--panel)" stroke-width="2"/>`;
+    });
+  }
+  const tipOf = o.dots?.tip || o.line?.tip;
+  items.forEach((it, i) => {
+    const has = (o.line && o.line.value(it) != null) || (o.dots && o.dots.value(it) != null);
+    if (has && tipOf) out += `<rect x="${PAD.l + f.step * i}" y="${PAD.t}" width="${f.step}" height="${f.ih}" fill="transparent" data-tip="${esc(tipOf(it))}"/>`;
+  });
+  return `<svg class="chart" viewBox="0 0 ${CW} ${CH}">${f.g}${out}</svg>`;
+}
+
+showView(location.hash === "#stats");
+
+btn.addEventListener("click", () => (phase === "live" ? stop() : start()));
+</script>
+</body>
+</html>
