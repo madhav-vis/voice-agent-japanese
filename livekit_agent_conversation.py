@@ -1,12 +1,14 @@
 from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import Agent, AgentSession, RunContext, tts
+from livekit.agents import llm
 from livekit.agents.llm import function_tool
 from livekit.plugins import anthropic, deepgram, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from datetime import datetime
 from voicevox_tts import VoicevoxTTS, JapaneseSentenceTokenizer
 from learner_profile import load_profile
+from emotion_tags import MoodFilter
 import os, asyncio, sqlite3, subprocess, sys
 
 #load env
@@ -15,7 +17,9 @@ load_dotenv(".env")
 class Assistant(Agent):
     """Basic voice agent"""
 
-    def __init__(self, profile=None):
+    def __init__(self, profile=None, room=None):
+        self._room = room            #where the avatar's mood is published; None in tests
+        self._mood_task = None
         instructions = """# 役割
         あなたは日本語を勉強している人の会話練習の相手です。
         目的は、ユーザーが日本語でたくさん話せるようになることです。そのために、楽しい会話を続けることを一番大切にしてください。
@@ -29,15 +33,21 @@ class Assistant(Agent):
         - 質問は毎回しなくても大丈夫です。質問するときは、ユーザーが話した内容に関係のある質問を一つだけしてください。
         - 毎回同じ言葉で始めないでください。「いいですね」ばかりにならないように、反応を変えてください。
 
+        # 気持ちのしるし
+        - 返事の一番はじめに、その返事の気持ちを表すしるしを一つだけ付けてください。【普通】【うれしい】【びっくり】【かなしい】【おだやか】の中から選んでください。
+        - しるしは声には出ません。画面のキャラクターの表情を変えるためのものです。
+        - しるしは返事のはじめに一回だけです。文の途中や終わりには付けないでください。
+        - 毎回同じしるしにしないで、返事の内容に合うものを選んでください。
+
         # 会話の例
         ユーザー「昨日、映画を見るました」
-        「へえ、映画館ですか？それとも家で見ましたか？あ、『見るました』じゃなくて『見ました』ですね。」
+        「【普通】へえ、映画館ですか？それとも家で見ましたか？あ、『見るました』じゃなくて『見ました』ですね。」
 
         ユーザー「週末は友達とラーメンを食べました」
-        「わあ、友達とラーメン、楽しそうですね！最近寒いから、温かいラーメンは本当においしいですよね。何味のラーメンでしたか？」
+        「【うれしい】わあ、友達とラーメン、楽しそうですね！最近寒いから、温かいラーメンは本当においしいですよね。何味のラーメンでしたか？」
 
         ユーザー「仕事がとても忙しいです」
-        「それは大変ですね。忙しいと、休みの日もゆっくりできないですよね。最近、毎日遅くまで働いていますか？」"""
+        「【かなしい】それは大変ですね。忙しいと、休みの日もゆっくりできないですよね。最近、毎日遅くまで働いていますか？」"""
 
         #learner profile from past sessions (written in English by learner_profile.py)
         if profile:
@@ -61,6 +71,36 @@ class Assistant(Agent):
         - メモは英語ですが、返事は必ず日本語だけにしてください。"""
 
         super().__init__(instructions=instructions)
+
+    async def llm_node(self, chat_ctx, tools, model_settings):
+        """Takes the mood marker (【うれしい】 …) out of the reply as it streams, before it is spoken,
+        captioned or stored in the history, and passes the mood on to the avatar."""
+        mood = MoodFilter()
+        shown = False
+        async for chunk in Agent.default.llm_node(self, chat_ctx, tools, model_settings):
+            if isinstance(chunk, llm.ChatChunk) and chunk.delta and chunk.delta.content:
+                chunk.delta.content = mood.feed(chunk.delta.content)
+            elif isinstance(chunk, str):
+                chunk = mood.feed(chunk)
+            if mood.emotion and not shown:
+                shown = True
+                self._show_mood(mood.emotion)
+            if chunk != "":
+                yield chunk
+        rest = mood.flush()  #text held back in case it was a marker
+        if rest:
+            yield rest
+
+    def _show_mood(self, emotion):
+        #the browser reads this participant attribute (index.html); console mode has no room to tell.
+        #Not awaited: a slow or failed update should cost a facial expression, never delay the voice
+        try:
+            if self._room is None or not self._room.isconnected():
+                return
+            self._mood_task = asyncio.create_task(self._room.local_participant.set_attributes({"avatar.emotion": emotion}))
+            self._mood_task.add_done_callback(lambda task: task.cancelled() or task.exception())
+        except Exception:
+            pass
 
 async def entrypoint(ctx: agents.JobContext):
     """Entry point for the agent."""
@@ -88,7 +128,7 @@ async def entrypoint(ctx: agents.JobContext):
     #start the session
     await session.start(
         room = ctx.room,
-        agent=Assistant(load_profile())
+        agent=Assistant(load_profile(), room=ctx.room)
     )
 
     async def save_transcript():
@@ -134,7 +174,7 @@ async def entrypoint(ctx: agents.JobContext):
     await session.generate_reply(
         instructions="""短く挨拶して、日本語の会話練習を手伝えてうれしいと伝えてください。
         質問はしないでください。
-        例：「こんにちは！今日は一緒に日本語で話しましょう。」
+        例：「【うれしい】こんにちは！今日は一緒に日本語で話しましょう。」
         毎回、例と同じ言い方にしないでください。"""
     )
 

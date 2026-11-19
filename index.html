@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>日本語 Practice</title>
 <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.min.js"></script>
+<!-- for the avatar modules in /avatar/, which are only fetched when the avatar is switched on -->
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+  "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.5.5/lib/three-vrm.module.min.js"
+} }
+</script>
 <style>
   /* ---------- tokens: day (light) and night (dark) ---------- */
   :root {
@@ -106,6 +114,9 @@
     text-shadow: 0 1px 1px rgba(0, 50, 100, .45);
   }
 
+  button.nav { font-family: inherit; background: none; cursor: pointer; margin-top: 10px; }
+  .nav[aria-pressed="true"] { color: var(--text); background: var(--inset); border-color: var(--inset-rim); box-shadow: inset 0 1px 0 var(--hl); }
+
   .pane { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
   .scroll {
     position: relative; z-index: 1; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent;
@@ -160,8 +171,9 @@
     background: conic-gradient(from 0deg, transparent 0, rgba(255, 255, 255, .7) 18%, transparent 40%, rgba(255, 255, 255, .4) 62%, transparent 82%);
     animation: turn 2.2s linear infinite paused;
   }
-  /* Only while connecting. Once the agent is in the room nothing on the page animates continuously:
-     every frame costs CPU that the local TTS needs (measured: ~50% of a core with animations, ~0 without) */
+  /* Only while connecting. Once the agent is in the room no CSS on the page animates continuously:
+     every frame costs CPU that the local TTS needs (measured: ~50% of a core with animations, ~0 without).
+     The avatar is the one thing that does keep drawing; it is capped at 30 frames a second and can be switched off */
   body[data-phase="connecting"] .swirl, body[data-phase="live"][data-state="initializing"] .swirl { opacity: 1; animation-play-state: running; }
   .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .85); opacity: 0; pointer-events: none; }
   body[data-phase="live"] .ring.lvl {  /* grows with your voice */
@@ -182,7 +194,7 @@
 
   /* first visit: nothing but a greeting and the orb */
   body[data-view="practice"]:is([data-phase="idle"], [data-phase="connecting"]):not(:has(#captions > *)):not(:has(#review:not([hidden]))) {
-    .pane { justify-content: center; }
+    .pane { display: flex; justify-content: center; }
     .scroll { flex: none; -webkit-mask: none; mask: none; }
     .scroll > div { padding-bottom: 0; }
     .hero { display: block; }
@@ -191,8 +203,28 @@
     .status { justify-self: auto; color: var(--muted); font-size: 16px; }
     .eq { display: none; }
     .orb:not(:disabled) { animation: breathe 5s ease-in-out infinite; }
+    &[data-avatar="on"] {  /* the avatar greets you; the orb steps back to being the button */
+      .avatar { flex: none; height: min(46vh, 440px); }
+      .scroll > div { padding-top: 4px; }
+      .stage { --orb: clamp(84px, 13vh, 112px); gap: 16px; padding: 22px 20px 30px; }
+    }
   }
   @keyframes breathe { 50% { transform: scale(1.035); } }
+
+  /* ---------- avatar: a column beside the captions. With data-avatar="off" the page is the orb-only layout ---------- */
+  .avatar {
+    display: none; position: relative; z-index: 1; min-width: 0; min-height: 0; opacity: 0; transition: opacity .7s;
+    /* fades into the glass at the bottom and towards the captions */
+    -webkit-mask: linear-gradient(#000 78%, transparent), linear-gradient(90deg, #000 84%, transparent); -webkit-mask-composite: source-in;
+    mask: linear-gradient(#000 78%, transparent), linear-gradient(90deg, #000 84%, transparent); mask-composite: intersect;
+  }
+  .avatar[data-ready] { opacity: 1; }
+  body[data-avatar="on"][data-view="practice"] {
+    .pane { display: grid; grid-template-columns: min(40%, 400px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+    .avatar { display: block; grid-area: 1 / 1; }
+    .scroll { grid-area: 1 / 2; }
+    .stage { grid-area: 2 / 1 / 3 / -1; }
+  }
 
   /* ---------- captions ---------- */
   #captions { display: flex; flex-direction: column; gap: 12px; }
@@ -305,6 +337,12 @@
     .nav { flex-direction: row; width: auto; gap: 7px; padding: 7px 14px; }
     .nav svg { margin: 0; width: 20px; height: 20px; }
     .nav small { display: none; }
+    button.nav { margin: 0 0 0 6px; }
+    body[data-avatar="on"][data-view="practice"] {  /* the avatar becomes a band above the captions */
+      .pane { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(110px, 30vh) minmax(0, 1fr) auto; }
+      .scroll { grid-area: 2 / 1; }
+      .stage { grid-area: 3 / 1; }
+    }
     .glass { border-radius: 28px; }
     .stage { padding: 10px 16px 12px; gap: 10px; }
     .status { font-size: 15px; }
@@ -346,9 +384,14 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.5v-6M12 19.5v-14M19 19.5v-9.5"/></svg>
       記録<small>Statistics</small>
     </a>
+    <button class="nav" id="navAvatar" type="button" aria-pressed="false" title="Show or hide the avatar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.4" r="3.9"/><path d="M4.6 20c.7-3.9 3.6-6 7.4-6s6.700 2.100 7.400 6"/></svg>
+      キャラ<small>Avatar</small>
+    </button>
   </nav>
 
   <main class="pane glass">
+    <div class="avatar" id="avatar" aria-hidden="true"></div>
     <div class="scroll" id="scroll">
       <div id="practiceView">
         <div class="hero">
@@ -396,6 +439,8 @@ const bubbles = new Map();   // segment id -> element
 function setState(state) {
   document.body.dataset.state = state;  // the orb's colour and motion follow this in CSS
   pillText.textContent = STATE_LABELS[state] || state;
+  avatar?.setActivity(state);           // anything that isn't listening/thinking/speaking is idle to the avatar
+  showEmotion();
 }
 
 function setPhase(next) {
@@ -412,6 +457,71 @@ function setPhase(next) {
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+
+// ---------- avatar ----------
+// Optional: if WebGL, the CDN or the model fails, this logs it and the page stays the orb-only page.
+// Everything goes through AvatarController (avatar/); nothing here touches the model itself.
+const avatarEl = document.getElementById("avatar");
+const navAvatar = document.getElementById("navAvatar");
+// full strength is a stage face (eyes shut, mouth wide); these suit a conversation
+const EMOTION_STRENGTH = { happy: 0.3, surprised: 0.6, sad: 0.5, relaxed: 0.6 };
+let avatar = null;           // AvatarController, once the model is on screen
+let avatarLoad = "new";      // new | loading | ready | failed
+let avatarOn = true;         // the rail toggle, remembered in this browser
+let agentTrack = null;       // the agent's voice, for lip-sync
+let agentEmotion = "neutral";
+let calmTimer = 0;
+try { avatarOn = localStorage.getItem("avatar") !== "off"; } catch {}
+
+function syncAvatar() {
+  const on = avatarOn && avatarLoad !== "failed";
+  document.body.dataset.avatar = on ? "on" : "off";   // the layout makes room for it (or not) in CSS
+  navAvatar.setAttribute("aria-pressed", on);
+  if (on && avatarLoad === "new") loadAvatar();        // three.js and the model are only downloaded when wanted
+  avatar?.setEnabled(on && document.body.dataset.view === "practice");  // off or out of sight: no drawing at all
+}
+
+async function loadAvatar() {
+  avatarLoad = "loading";
+  let loading;
+  try {
+    const { AvatarController } = await import("/avatar/AvatarController.js");
+    loading = new AvatarController(avatarEl);
+    await loading.load("/models/avatar.vrm");
+    avatar = loading;
+    avatarLoad = "ready";
+    avatarEl.dataset.ready = "";
+    avatar.setActivity(document.body.dataset.state);
+    if (agentTrack) avatar.followAudio(agentTrack);
+  } catch (err) {
+    console.warn("Avatar unavailable, continuing without it:", err);
+    loading?.dispose();
+    avatarLoad = "failed";
+    navAvatar.hidden = true;
+  }
+  syncAvatar();
+}
+
+// The agent names a feeling per reply (participant attribute avatar.emotion). It shows while that reply
+// is spoken, lingers a moment, and gives way to the thinking/listening face.
+function showEmotion() {
+  clearTimeout(calmTimer);
+  const state = document.body.dataset.state;
+  if (state === "speaking") avatar?.setEmotion(agentEmotion, EMOTION_STRENGTH[agentEmotion]);
+  else if (state === "listening") calmTimer = setTimeout(() => avatar?.setEmotion("neutral"), 4000);
+  else avatar?.setEmotion("neutral");
+}
+
+function followAgentVoice(mediaStreamTrack) {
+  agentTrack = mediaStreamTrack;
+  avatar?.followAudio(agentTrack);
+}
+
+navAvatar.addEventListener("click", () => {
+  avatarOn = !avatarOn;
+  try { localStorage.setItem("avatar", avatarOn ? "on" : "off"); } catch {}
+  syncAvatar();
+});
 
 // ---------- captions ----------
 // STT finalizes each phrase as its own segment; consecutive segments from the same speaker are merged
@@ -464,6 +574,7 @@ async function start() {
   captions.innerHTML = "";
   bubbles.clear();
   turn = null;
+  agentEmotion = "neutral";
 
   try {
     const res = await fetch("/api/token");
@@ -479,13 +590,18 @@ async function start() {
         const el = track.attach();
         el.dataset.lk = "1";
         document.body.appendChild(el);
+        followAgentVoice(track.mediaStreamTrack);  // the element plays it; the avatar only listens in for lip-sync
       }
     });
-    room.on(RoomEvent.TrackUnsubscribed, (track) => track.detach().forEach(el => el.remove()));
+    room.on(RoomEvent.TrackUnsubscribed, (track) => {
+      track.detach().forEach(el => el.remove());
+      if (track.mediaStreamTrack === agentTrack) followAgentVoice(null);
+    });
     room.on(RoomEvent.ParticipantAttributesChanged, (changed, participant) => {
-      if (participant.kind === ParticipantKind.AGENT && changed["lk.agent.state"]) {
-        setState(changed["lk.agent.state"]);
-      }
+      if (participant.kind !== ParticipantKind.AGENT) return;
+      if (changed["avatar.emotion"]) agentEmotion = changed["avatar.emotion"];
+      if (changed["lk.agent.state"]) setState(changed["lk.agent.state"]);
+      else if (changed["avatar.emotion"]) showEmotion();
     });
     room.on(RoomEvent.ParticipantConnected, (p) => {
       if (p.kind === ParticipantKind.AGENT) setState(p.attributes["lk.agent.state"] || "initializing");
@@ -567,6 +683,7 @@ function ended() {
   // a failed connect also fires Disconnected; start()'s catch reports that, there is nothing to review
   if (phase !== "live") return;
   document.querySelectorAll("audio[data-lk]").forEach(el => el.remove());
+  followAgentVoice(null);
   stopMicLevel();
   stage.classList.remove("voiced");
   setState("ended");
@@ -677,6 +794,7 @@ function showView(stats) {
   document.getElementById("navPractice").toggleAttribute("aria-current", !stats);
   scroller.scrollTop = 0;
   setPhase(phase);  // grey out Start while on the stats view
+  syncAvatar();     // the avatar only draws on the practice view
   if (stats) loadStats();
 }
 window.addEventListener("hashchange", () => showView(location.hash === "#stats"));

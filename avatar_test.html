@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avatar test</title>
+<!-- same pinned versions as index.html -->
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+  "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.5.5/lib/three-vrm.module.min.js"
+} }
+</script>
+<style>
+  :root { --text: #0b3350; --muted: #35586f; --panel: rgba(255, 255, 255, .62); --line: rgba(11, 51, 80, .18); --accent: #0a86cc; --sky-a: #bfe2ff; --sky-b: #8cc6fb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --text: #eaf6ff; --muted: #a8c4d8; --panel: rgba(20, 44, 84, .62); --line: rgba(255, 255, 255, .18); --accent: #5cc8ff; --sky-a: #123f9c; --sky-b: #07162e; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; color: var(--text); background: linear-gradient(160deg, var(--sky-a), var(--sky-b)) fixed;
+    font: 15px/1.5 "Hiragino Maru Gothic ProN", "Segoe UI", "Hiragino Sans", system-ui, sans-serif;
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px;
+  }
+  #view { min-height: 0; position: relative; }
+  #note { position: absolute; inset: auto 16px 16px 16px; text-align: center; color: var(--muted); }
+  aside { overflow-y: auto; padding: 18px; background: var(--panel); border-left: 1px solid var(--line); }
+  h1 { font-size: 18px; font-weight: 500; margin: 0 0 2px; }
+  h2 { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; }
+  p { margin: 0; color: var(--muted); font-size: 13px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  button {
+    font: inherit; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 4px 13px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  label { display: grid; grid-template-columns: 4.5em 1fr 2.6em; align-items: center; gap: 8px; font-size: 13px; }
+  label output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  input[type="text"] { font: inherit; width: 100%; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--text); margin-bottom: 6px; }
+  @media (max-width: 760px) { body { grid-template-columns: 1fr; grid-template-rows: 46vh minmax(0, 1fr); } aside { border-left: 0; border-top: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<div id="view"><div id="note">Loading the model…</div></div>
+<aside>
+  <h1>Avatar test</h1>
+  <p id="info">The model on its own: no LiveKit, no agent.</p>
+
+  <h2>Emotion</h2>
+  <div class="row" id="emotions"></div>
+  <label style="margin-top:8px">strength <input type="range" id="strength" min="0" max="1" step="0.05" value="1"><output>1</output></label>
+
+  <h2>Agent state</h2>
+  <div class="row" id="activities"></div>
+
+  <h2>Eyes</h2>
+  <div class="row"><button id="blink">Blink</button></div>
+
+  <h2>Mouth</h2>
+  <div id="mouths"></div>
+
+  <h2>Voice (lip-sync)</h2>
+  <input type="text" id="line" value="こんにちは！今日は一緒に日本語で話しましょう。" lang="ja">
+  <div class="row"><button id="speak">Speak with AivisSpeech</button></div>
+  <p id="voiceNote" style="margin-top:6px">Uses the same audio-track path as a live session.</p>
+
+  <h2>Cost</h2>
+  <p id="cost">–</p>
+</aside>
+
+<script type="module">
+import { AvatarController } from "/avatar/AvatarController.js";
+
+const TTS_URL = "http://127.0.0.1:10101", SPEAKER = 1878365376;  // AivisSpeech コハク/ノーマル, as in livekit_agent_conversation.py
+const $ = id => document.getElementById(id);
+const note = $("note");
+
+let avatar;
+try {
+  avatar = new AvatarController($("view"));
+  await avatar.load("/models/avatar.vrm");
+  note.remove();
+  const meta = avatar.vrm.meta;
+  $("info").textContent = `${meta.name || meta.title || "model"} · VRM ${meta.metaVersion === "0" ? "0.x" : "1.0"} · expressions: ${Object.keys(avatar.vrm.expressionManager.expressionMap).join(", ")}`;
+  window.avatar = avatar;  // for poking at it from the console
+} catch (err) {
+  console.error(err);
+  note.textContent = "Couldn't show the model: " + err.message;
+}
+
+// one pressed button per group
+function group(el, names, onPick, initial) {
+  for (const name of names) {
+    const b = document.createElement("button");
+    b.textContent = name;
+    b.setAttribute("aria-pressed", name === initial);
+    b.onclick = () => {
+      for (const other of el.children) other.setAttribute("aria-pressed", other === b);
+      onPick(name);
+    };
+    el.appendChild(b);
+  }
+}
+
+let emotion = "neutral";
+const strength = $("strength");
+const applyEmotion = () => avatar?.setEmotion(emotion, +strength.value);
+group($("emotions"), ["neutral", "happy", "angry", "sad", "relaxed", "surprised"], name => { emotion = name; applyEmotion(); }, "neutral");
+strength.oninput = () => { strength.nextElementSibling.textContent = strength.value; applyEmotion(); };
+
+group($("activities"), ["idle", "listening", "thinking", "speaking"], name => avatar?.setActivity(name), "idle");
+$("blink").onclick = () => avatar?.blinkNow();
+
+// aa is the lip-sync channel; the other vowels are held directly so each mouth shape can be checked
+for (const name of ["aa", "ih", "ou", "ee", "oh"]) {
+  const label = document.createElement("label");
+  label.innerHTML = `${name} <input type="range" min="0" max="1" step="0.05" value="0"><output>0</output>`;
+  const input = label.querySelector("input");
+  input.oninput = () => {
+    label.querySelector("output").textContent = input.value;
+    if (name === "aa") avatar?.setMouthOpen(+input.value);
+    else avatar?.setExpression(name, +input.value || null);
+  };
+  $("mouths").appendChild(label);
+}
+
+// Synthesize a line and play it through a MediaStreamTrack, which is what LiveKit hands the page in a session
+let ctx;
+$("speak").onclick = async () => {
+  const button = $("speak"), voiceNote = $("voiceNote");
+  button.disabled = true;
+  try {
+    ctx ||= new AudioContext();
+    await ctx.resume();
+    const text = $("line").value.trim() || "こんにちは。";
+    const query = await (await fetch(`${TTS_URL}/audio_query?speaker=${SPEAKER}&text=${encodeURIComponent(text)}`, { method: "POST" })).json();
+    const wav = await (await fetch(`${TTS_URL}/synthesis?speaker=${SPEAKER}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(query),
+    })).arrayBuffer();
+    const source = ctx.createBufferSource();
+    source.buffer = await ctx.decodeAudioData(wav);
+    const out = ctx.createMediaStreamDestination();
+    source.connect(out);
+    source.connect(ctx.destination);
+    avatar?.followAudio(out.stream.getAudioTracks()[0]);
+    avatar?.setActivity("speaking");
+    voiceNote.textContent = `Speaking (${source.buffer.duration.toFixed(1)} s)…`;
+    source.onended = () => {
+      avatar?.followAudio(null);
+      avatar?.setActivity("idle");
+      voiceNote.textContent = "Done. The mouth should be closed again.";
+      button.disabled = false;
+    };
+    source.start();
+  } catch (err) {
+    console.error(err);
+    voiceNote.textContent = `No voice: ${err.message}. Is AivisSpeech running on ${TTS_URL}?`;
+    button.disabled = false;
+  }
+};
+
+setInterval(() => {
+  if (avatar?.vrm) $("cost").textContent = `${avatar.frameMs.toFixed(1)} ms per frame on the main thread, 30 frames a second`;
+}, 500);
+</script>
+</body>
+</html>

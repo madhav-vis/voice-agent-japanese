@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 from livekit import api
-import json, os, secrets, sqlite3, time, warnings
+import json, os, secrets, shutil, sqlite3, time, warnings
 import grammar_police, review, stats
 
 load_dotenv(".env")
@@ -17,6 +17,9 @@ warnings.filterwarnings("ignore", message=".*HMAC key.*")  # the dev secret "sec
 HERE = os.path.dirname(os.path.abspath(__file__))
 PORT = int(os.getenv("UI_PORT", "8000"))
 POINTS = grammar_police.load_grammar_points()
+AVATAR_DIR = os.path.join(HERE, "avatar")
+#the .vrm model shown in the browser; a relative AVATAR_VRM is taken from the project folder
+MODEL_PATH = os.path.join(HERE, os.path.expanduser(os.getenv("AVATAR_VRM", "models/Voice_Agent_Test.vrm")))
 
 
 def make_token():
@@ -71,12 +74,46 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def send_file(self, path, content_type):
+        """Static file the browser may keep but must re-check: an edited module or a re-exported model shows up
+        on the next reload, an unchanged 17 MB model is not sent again."""
+        info = os.stat(path)
+        etag = f'"{info.st_mtime_ns:x}-{info.st_size:x}"'
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(info.st_size))
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        with open(path, "rb") as f:
+            shutil.copyfileobj(f, self.wfile)
+
     def do_GET(self):
         url = urlparse(self.path)
         try:
             if url.path in ("/", "/index.html"):
                 with open(os.path.join(HERE, "index.html"), "rb") as f:
                     self.send(200, f.read(), "text/html; charset=utf-8")
+            elif url.path == "/avatar-test":
+                with open(os.path.join(HERE, "avatar_test.html"), "rb") as f:
+                    self.send(200, f.read(), "text/html; charset=utf-8")
+            elif url.path.startswith("/avatar/"):
+                #only names that are in the folder's own listing, so no path can point outside it
+                name = url.path[len("/avatar/"):]
+                if name.endswith(".js") and name in os.listdir(AVATAR_DIR):
+                    self.send_file(os.path.join(AVATAR_DIR, name), "text/javascript; charset=utf-8")
+                else:
+                    self.send(404, {"error": "not found"})
+            elif url.path == "/models/avatar.vrm":
+                if os.path.isfile(MODEL_PATH):
+                    self.send_file(MODEL_PATH, "model/gltf-binary")
+                else:
+                    self.send(404, {"error": f"no model at {MODEL_PATH} (set AVATAR_VRM in .env)"})
             elif url.path == "/api/token":
                 self.send(200, make_token())
             elif url.path == "/api/stats":
@@ -89,6 +126,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, room_review(room))
             else:
                 self.send(404, {"error": "not found"})
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # the browser dropped the request (e.g. a reload while the model was downloading)
         except Exception as e:
             self.send(500, {"error": str(e)})
 

@@ -21,15 +21,19 @@ A voice AI agent for improving Japanese conversational skill: talk freely, get g
 
 | File | Role |
 |---|---|
-| `livekit_agent_conversation.py` | The agent: `Assistant` (system prompt + injected profile), `entrypoint` (pipeline config, greeting), shutdown callback that saves the transcript and starts `grammar_police.py` |
+| `livekit_agent_conversation.py` | The agent: `Assistant` (system prompt + injected profile; `llm_node` strips the mood marker and publishes it as `avatar.emotion`), `entrypoint` (pipeline config, greeting), shutdown callback that saves the transcript and starts `grammar_police.py` |
+| `emotion_tags.py` | `MoodFilter`: removes the leading mood marker (【うれしい】 …) from a streamed reply and maps it to a VRM expression. `uv run python emotion_tags.py` runs its self-check |
 | `voicevox_tts.py` | `VoicevoxTTS` plugin (`/audio_query` → `/synthesis`) and `JapaneseSentenceTokenizer` (splits on 。！？) |
 | `grammar_police.py` | Post-session grammar analysis; owns `grammar_feedback` / `grammar_sessions` schema and migrations; rebuilds the profile after analyzing |
 | `learner_profile.py` | Builds and loads the learner profile; owns the `learner_profile` schema and migrations |
 | `review.py` | CLI viewer for mistakes; `session_review()` returns one session as a dict (used by `ui_server.py`), `print_session()` renders it (also used by `grammar_police.py` for its log output) |
 | `bunpro_grammar_points.csv` | `level,number,grammar,meaning,url`; keys are `"{level}-{number}"` (e.g. `N5-13`). Gitignored (`*.csv`) |
-| `ui_server.py` | Browser UI backend (stdlib `http.server`): serves `index.html`, `GET /api/token` (LiveKit token + new `jp-…` room), `GET /api/review?room=` (`saving` → `analyzing` → `done` + `review.session_review` data + `card`), `GET /api/stats` (`stats.compute_stats`) |
+| `ui_server.py` | Browser UI backend (stdlib `http.server`): serves `index.html`, the avatar files (`/avatar/*.js`, `/models/avatar.vrm`, `/avatar-test`), `GET /api/token` (LiveKit token + new `jp-…` room), `GET /api/review?room=` (`saving` → `analyzing` → `done` + `review.session_review` data + `card`), `GET /api/stats` (`stats.compute_stats`) |
 | `stats.py` | Progress statistics: `compute_stats()` (heatmap, streaks, weekly volume/accuracy/mistake types, correct rate, weak spots, fixed points, JLPT levels, turn length, topics) and `session_card()` for the end-of-session card. `uv run python stats.py` prints the JSON |
-| `index.html` | Browser UI (Frutiger Aero theme: static marbled blue-green swirl background, glass pane, nav rail 練習/記録): one gel orb (`#btn`) is Start/Stop, shows the agent state by colour/motion and the mic level (`--level` on `#stage`); layout switches on `body[data-phase|data-state|data-view]`; live captions, end-of-session review with session card; Statistics view (`#stats`) with hand-written SVG charts. Plain JS, `livekit-client` UMD pinned on jsDelivr |
+| `index.html` | Browser UI (Frutiger Aero theme: static marbled blue-green swirl background, glass pane, nav rail 練習/記録): one gel orb (`#btn`) is Start/Stop, shows the agent state by colour/motion and the mic level (`--level` on `#stage`); layout switches on `body[data-phase|data-state|data-view]`; live captions, end-of-session review with session card; Statistics view (`#stats`) with hand-written SVG charts. Plain JS, `livekit-client` UMD pinned on jsDelivr. Optional 3D avatar beside the captions (see Avatar) |
+| `avatar/` | The avatar, as plain ES modules: `AvatarController.js` (the only thing a page talks to), `vrmLoader.js`, `lipSync.js` |
+| `avatar_test.html` | The model on its own at `/avatar-test`: buttons for every emotion and agent state, mouth sliders, and a line spoken through AivisSpeech to check lip-sync |
+| `models/` | The `.vrm` model (gitignored, `*.vrm`) |
 | `Code_Documentation.MD` | Older free-form notes |
 
 ## Data flow
@@ -55,6 +59,7 @@ Never commit it — it contains personal conversations (`*.db` is gitignored). S
 - Agent style: です・ます, 2–4 sentences, react to specifics, at most one question, correct one mistake gently after responding to content, no invented personal experiences, no romaji/alphabet (output is spoken).
 - Memory rule: 「覚えていることは自然なときだけ使ってください」 — use facts naturally, don't recite the profile; plus a nudge not to keep returning to old topics.
 - Grammar analysis rules treat spoken Japanese leniently: casual/polite/keigo are all valid registers; natural particle drops, contractions (〜てる, 〜ちゃう), inverted order, fillers and sentence-final particles are not mistakes. `register` issues are only wrong keigo or jarring switches within one utterance. ASR errors → `asr_unclear`, no issues.
+- Mood marker: each reply starts with one of 【普通】【うれしい】【びっくり】【かなしい】【おだやか】 (Japanese brackets, so it doesn't fight the no-alphabet rule). `Assistant.llm_node` removes it before TTS, captions and `session.history`, so it is never spoken and never reaches `transcripts.db`.
 - Structured output: both Sonnet calls use `output_config={"format": {"type": "json_schema", ...}}` and raise if `stop_reason == "max_tokens"`.
 
 ### Learner profile details
@@ -110,6 +115,18 @@ uv run python ui_server.py                             # open http://localhost:8
 - Mic access works on `http://localhost` without HTTPS (browsers treat localhost as a secure context).
 - Keep server URL and keys in `.env`, never in code, so moving to LiveKit Cloud is a config change.
 
+### Avatar
+
+A VRM model (VRoid Studio export, VRM 0.x or 1.0) stands beside the captions and acts out the agent's state. three.js `0.180.0` and `@pixiv/three-vrm` `3.5.5` come from jsDelivr through the import map in `index.html` / `avatar_test.html` (keep the two in step); there is still no build step.
+
+- **Boundary:** pages only call `AvatarController` — `load(url)`, `setActivity(idle|listening|thinking|speaking)`, `setEmotion(name, strength)`, `followAudio(mediaStreamTrack)`, `setEnabled(bool)`. Bones and expressions are never touched from `index.html`.
+- **Cues:** `setState()` forwards `lk.agent.state`; the agent's audio track goes to `followAudio` (an analyser that is not connected to the speakers, so playback is untouched; RMS drives the `aa` mouth shape); the agent participant attribute `avatar.emotion` is shown while that reply is spoken and eases back to neutral 4 s later. The attribute only changes when the mood does, so the page re-applies the stored value on every `speaking`.
+- **Motion is procedural** (no animation files): arms lowered from the T-pose, breathing, blinking, eyes on the viewer, a lean while listening, head up and away while thinking.
+- **Strengths:** VRoid expressions at full weight are stage faces (happy closes the eyes). `EMOTION_STRENGTH` in `index.html` tones them down; this model's expressions add up rather than override, so the controller also damps blink and mouth under `happy`.
+- **Cost:** drawn at most 30 times a second, DPR ≤ 1.5, not at all on the Statistics view or when switched off with the rail toggle (キャラ, remembered in `localStorage`). three.js and the model are only downloaded when the avatar is on.
+- **Fallback:** if WebGL, the CDN or the model is missing, the page logs a warning and is the orb-only page.
+- **Changing the model:** put the `.vrm` in `models/` and set `AVATAR_VRM` in `.env`; check it on `/avatar-test` first.
+
 ### Deployment (later)
 
 | Piece | Local | Deployed |
@@ -135,8 +152,8 @@ Also needed before sharing a public link: HTTPS everywhere (mic access requires 
 
 ## Other planned features
 
-- 3D avatar representation
+- Avatar: real vowel shapes (AivisSpeech's `/audio_query` returns per-mora vowels and timings; they would have to be synced to WebRTC playout), and animation clips (`.vrma`) for gestures
 
 ## Env
 
-`.env` is gitignored. Keys/config go there: `CLAUDE_API_KEY`, `DEEPGRAM_API_KEY`, optional `JLPT_LEVEL`; for the browser UI also `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`.
+`.env` is gitignored. Keys/config go there: `CLAUDE_API_KEY`, `DEEPGRAM_API_KEY`, optional `JLPT_LEVEL`, optional `AVATAR_VRM` (path to the model, default `models/Voice_Agent_Test.vrm`); for the browser UI also `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`.
