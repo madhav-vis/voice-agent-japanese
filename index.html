@@ -15,8 +15,9 @@
     --inset: rgba(255, 255, 255, .42); --inset-rim: rgba(255, 255, 255, .78);
     --agent-a: rgba(255, 255, 255, .94); --agent-b: rgba(255, 255, 255, .68);
     --me-a: rgba(204, 242, 255, .96); --me-b: rgba(126, 214, 250, .82);
-    --sky: linear-gradient(180deg, #0a6bcc 0%, #2b98ea 30%, #7ccff7 56%, #d2f3ff 72%, #f3ffdc 82%);
-    --hill-1a: #9fe27c; --hill-1b: #58bb45; --hill-2a: #86dc52; --hill-2b: #2f9f22; --hill-3a: #b4f070; --hill-3b: #3aa722;
+    /* background marble: ~70% close blues (w4 sky, w5 mid, w7 pale), thin pale veins (w1), a little aqua (w3) and mint (w2, w6) */
+    --sky: #8cc6fb;
+    --w1: #e3f3ff; --w2: #a6e9b4; --w3: #9be9e6; --w4: #8cc6fb; --w5: #6eaff5; --w6: #c2f0d0; --w7: #a8d6fd;
     --heat-0: rgba(11, 51, 80, .13); --heat-1: #8fd8e8; --heat-2: #3fb9c6; --heat-3: #2aa36a; --heat-4: #157a2e;
     /* issue types: categorical slots in fixed order */
     --t-particle: #2a78d6; --t-wa_ga: #eb6834; --t-conjugation: #1baf7a; --t-word_choice: #eda100;
@@ -33,8 +34,8 @@
       --inset: rgba(255, 255, 255, .07); --inset-rim: rgba(255, 255, 255, .16);
       --agent-a: rgba(255, 255, 255, .17); --agent-b: rgba(255, 255, 255, .08);
       --me-a: rgba(92, 200, 255, .40); --me-b: rgba(20, 130, 210, .34);
-      --sky: linear-gradient(180deg, #030822 0%, #08204f 34%, #0e4a72 62%, #15746f 80%, #1d8a72 90%);
-      --hill-1a: #12524f; --hill-1b: #0b3238; --hill-2a: #0e3f44; --hill-2b: #07232d; --hill-3a: #0c3039; --hill-3b: #041520;
+      --sky: #0a2a6a;
+      --w1: #3d7fe0; --w2: #1f9a78; --w3: #1a8fb0; --w4: #123f9c; --w5: #071a52; --w6: #2aa98a; --w7: #1a50b4;
       --heat-0: rgba(255, 255, 255, .08); --heat-1: #14505f; --heat-2: #1b8388; --heat-3: #35b67d; --heat-4: #8be88f;
       --t-particle: #3987e5; --t-wa_ga: #d95926; --t-conjugation: #199e70; --t-word_choice: #c98500;
       --t-register: #d55181; --t-filler: #0ca30c; --t-other: #9085e9;
@@ -49,7 +50,7 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
-    margin: 0; color: var(--text); background: #2b98ea; overflow: hidden;
+    margin: 0; color: var(--text); background: #8cc6fb; overflow: hidden;
     font: 16px/1.65 "Hiragino Maru Gothic ProN", Frutiger, "Frutiger Linotype", "Segoe UI", "Myriad Pro", "Lucida Grande",
       "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -59,81 +60,11 @@
   code { font-size: .9em; padding: 1px 6px; border-radius: 6px; background: var(--inset); border: 1px solid var(--inset-rim); }
   :focus-visible { outline: 3px solid var(--hl); outline-offset: 3px; box-shadow: 0 0 0 6px rgba(10, 134, 204, .55); }
 
-  /* ---------- the scene: sky, light, hills ---------- */
+  /* ---------- background: marbled swirls (blurred blobs warped by noise), completely static: nothing to redraw during a session ---------- */
   .scene { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: var(--sky); }
-  .scene > * { position: absolute; pointer-events: none; }
-  .sun {
-    left: -18vmax; top: -22vmax; width: 70vmax; height: 70vmax;
-    background: radial-gradient(circle, rgba(255, 255, 255, .98) 0, rgba(255, 255, 255, .55) 10%, rgba(255, 255, 240, .2) 32%, transparent 60%);
-  }
-  .rays {
-    left: -42vmax; top: -46vmax; width: 120vmax; height: 120vmax;
-    background: repeating-conic-gradient(from 96deg, rgba(255, 255, 255, .13) 0 3deg, transparent 3deg 11deg, rgba(255, 255, 255, .07) 11deg 12.5deg, transparent 12.5deg 21deg);
-    -webkit-mask: radial-gradient(circle, #000 4%, transparent 58%); mask: radial-gradient(circle, #000 4%, transparent 58%);
-    animation: turn 240s linear infinite;
-  }
-  .cloud {
-    width: 620px; height: 150px; filter: blur(16px); opacity: .9;
-    background:
-      radial-gradient(closest-side, #fff, transparent) 0 40px / 300px 110px no-repeat,
-      radial-gradient(closest-side, #fff, transparent) 150px 0 / 320px 150px no-repeat,
-      radial-gradient(closest-side, #fff, transparent) 330px 46px / 290px 100px no-repeat;
-    animation: drift 110s ease-in-out infinite alternate;
-  }
-  .cloud.c1 { top: 12%; left: 46%; }
-  .cloud.c2 { top: 34%; left: -6%; transform: scale(.7); opacity: .7; animation-duration: 150s; animation-direction: alternate-reverse; }
-  .cloud.c3 { top: 50%; left: 70%; transform: scale(.55); opacity: .6; animation-duration: 130s; }
-  .aurora, .stars { display: none; }
-  .bubble-fx {
-    border-radius: 50%; width: var(--s); height: var(--s); left: var(--x); bottom: -160px;
-    background:
-      radial-gradient(circle at 32% 28%, rgba(255, 255, 255, .95) 0 6%, transparent 15%),
-      radial-gradient(circle at 50% 50%, transparent 52%, rgba(255, 255, 255, .28) 66%, rgba(255, 255, 255, .75) 70%, transparent 72%),
-      radial-gradient(circle at 68% 74%, rgba(190, 240, 255, .5), transparent 44%);
-    animation: rise var(--t) linear infinite; animation-delay: var(--d);
-  }
-  .hills { left: 0; bottom: 0; width: 100%; height: 38vh; min-height: 220px; }
-  .hills .far { filter: blur(5px); }
-  .hills .mid { filter: blur(2.5px); }
-  /* the sky holds still during a session: moving it re-blurs the glass every frame, and local TTS needs the machine */
-  body[data-phase="live"] .scene > * { animation-play-state: paused; }
+  .waves { position: absolute; left: -10%; top: -10%; width: 120%; height: 120%; pointer-events: none; }
   @keyframes turn { to { transform: rotate(360deg); } }
-  @keyframes drift { from { translate: -5vw 0; } to { translate: 7vw 0; } }
-  @keyframes rise {
-    0% { transform: translate(0, 0); opacity: 0; } 8% { opacity: .9; }
-    50% { transform: translate(28px, -62vh); } 92% { opacity: .9; }
-    100% { transform: translate(-14px, -125vh); opacity: 0; }
-  }
-  @media (prefers-color-scheme: dark) {
-    body { background: #08204f; }
-    .sun {  /* the moon */
-      right: 4vw; top: 3vh; width: 34vmin; height: 34vmin; left: auto;
-      background: radial-gradient(circle, rgba(236, 246, 255, .95) 0 9%, rgba(190, 225, 255, .28) 12%, rgba(150, 205, 255, .1) 34%, transparent 62%);
-    }
-    .rays, .cloud { display: none; }
-    .aurora {
-      display: block; left: -10%; right: -10%; top: 6%; height: 52%; filter: blur(46px); opacity: .8;
-      background:
-        radial-gradient(60% 34% at 30% 46%, rgba(70, 255, 170, .55), transparent 70%),
-        radial-gradient(50% 26% at 68% 34%, rgba(60, 220, 255, .5), transparent 70%),
-        radial-gradient(40% 20% at 52% 70%, rgba(120, 255, 200, .35), transparent 70%);
-      animation: sway 26s ease-in-out infinite alternate;
-    }
-    .stars {
-      display: block; inset: 0 0 40% 0; opacity: .85;
-      background-image:
-        radial-gradient(1.2px 1.2px at 12% 18%, #fff, transparent 60%), radial-gradient(1px 1px at 27% 42%, #fff, transparent 60%),
-        radial-gradient(1.4px 1.4px at 41% 12%, #fff, transparent 60%), radial-gradient(1px 1px at 58% 30%, #fff, transparent 60%),
-        radial-gradient(1.3px 1.3px at 73% 9%, #fff, transparent 60%), radial-gradient(1px 1px at 86% 38%, #fff, transparent 60%),
-        radial-gradient(1.1px 1.1px at 94% 16%, #fff, transparent 60%), radial-gradient(1px 1px at 6% 56%, #fff, transparent 60%),
-        radial-gradient(1.2px 1.2px at 49% 58%, #fff, transparent 60%), radial-gradient(1px 1px at 66% 62%, #fff, transparent 60%);
-    }
-    .bubble-fx {  /* fireflies */
-      width: 7px; height: 7px; background: radial-gradient(circle, #eaffb0 0 30%, rgba(190, 255, 120, .5) 45%, transparent 70%);
-      box-shadow: 0 0 14px 4px rgba(190, 255, 120, .35);
-    }
-  }
-  @keyframes sway { from { transform: translateX(-4%) skewX(-6deg); } to { transform: translateX(4%) skewX(7deg) scaleY(1.12); } }
+  @media (prefers-color-scheme: dark) { body { background: #0a2a6a; } }
 
   /* ---------- glass and gel ---------- */
   .glass {
@@ -160,12 +91,6 @@
   }
   .rail { align-self: start; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 10px; border-radius: 30px; }
   .rail::before { border-radius: 29px 29px 50% 50% / 29px 29px 18px 18px; height: 60px; }
-  .logo {
-    width: 30px; height: 30px; margin: 6px 0 12px; border-radius: 0 50% 50% 50%; transform: rotate(45deg); position: relative; z-index: 1;
-    background: radial-gradient(circle at 62% 62%, #a8ecff 0, #1fa8ea 55%, #0562a8 100%);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5), 0 5px 12px -3px rgba(5, 98, 168, .7);
-  }
-  .logo::after { content: ""; position: absolute; left: 34%; top: 34%; width: 40%; height: 26%; border-radius: 50%; background: rgba(255, 255, 255, .85); transform: rotate(-45deg); }
   .nav {
     position: relative; z-index: 1; width: 74px; padding: 10px 0 8px; border-radius: 22px; border: 1px solid transparent;
     display: flex; flex-direction: column; align-items: center; gap: 1px;
@@ -190,7 +115,6 @@
   .scroll > div { max-width: 780px; margin: 0 auto; padding: 30px clamp(16px, 3vw, 30px) 26px; }
   .hero { display: none; text-align: center; }
   .hero h1 { margin: 0; font-size: clamp(26px, 4.2vw, 38px); font-weight: 300; letter-spacing: .06em; line-height: 1.35; }
-  .hero p { margin: 10px 0 0; color: var(--muted); font-size: 15px; font-family: Frutiger, "Segoe UI", "Lucida Grande", system-ui, sans-serif; }
 
   /* ---------- the dock and the orb ---------- */
   .stage {
@@ -378,7 +302,6 @@
     .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 10px; padding: 10px; }
     .rail { flex-direction: row; justify-content: center; align-self: auto; padding: 6px 12px; border-radius: 26px; }
     .rail::before { display: none; }
-    .logo { margin: 0 auto 0 8px; width: 24px; height: 24px; }
     .nav { flex-direction: row; width: auto; gap: 7px; padding: 7px 14px; }
     .nav svg { margin: 0; width: 20px; height: 20px; }
     .nav small { display: none; }
@@ -389,37 +312,32 @@
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
-    .bubble-fx { display: none; }
   }
 </style>
 </head>
 <body data-phase="idle" data-state="idle" data-view="practice">
 <div class="scene" aria-hidden="true">
-  <div class="sun"></div>
-  <div class="rays"></div>
-  <div class="stars"></div>
-  <div class="aurora"></div>
-  <div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div>
-  <svg class="hills" viewBox="0 0 1440 400" preserveAspectRatio="none">
+  <svg class="waves" viewBox="0 0 1440 900" preserveAspectRatio="none">
     <defs>
-      <linearGradient id="h1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--hill-1a)"/><stop offset="1" style="stop-color:var(--hill-1b)"/></linearGradient>
-      <linearGradient id="h2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--hill-2a)"/><stop offset="1" style="stop-color:var(--hill-2b)"/></linearGradient>
-      <linearGradient id="h3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--hill-3a)"/><stop offset="1" style="stop-color:var(--hill-3b)"/></linearGradient>
+      <!-- colour bands, softened, then bent twice by smooth noise into flowing marbled swirls -->
+      <filter id="marble" filterUnits="userSpaceOnUse" x="-200" y="-200" width="1840" height="1300" color-interpolation-filters="sRGB">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="30" result="soft"/>
+        <feTurbulence type="fractalNoise" baseFrequency="0.0022 0.003" numOctaves="2" seed="7" result="n1"/>
+        <feDisplacementMap in="soft" in2="n1" scale="620" xChannelSelector="R" yChannelSelector="G" result="d1"/>
+        <feTurbulence type="fractalNoise" baseFrequency="0.0052 0.0044" numOctaves="1" seed="23" result="n2"/>
+        <feDisplacementMap in="d1" in2="n2" scale="230" xChannelSelector="G" yChannelSelector="B" result="d2"/>
+        <feGaussianBlur in="d2" stdDeviation="5"/>
+      </filter>
     </defs>
-    <path class="far" fill="url(#h1)" d="M-20,220 C240,120 420,140 640,195 C860,250 1080,120 1460,175 L1460,420 L-20,420Z"/>
-    <path class="mid" fill="url(#h2)" d="M-20,290 C200,225 380,305 620,275 C900,238 1100,305 1460,235 L1460,420 L-20,420Z"/>
-    <path fill="url(#h3)" d="M-20,345 C260,292 520,365 800,334 C1050,306 1250,354 1460,322 L1460,420 L-20,420Z"/>
+    <g filter="url(#marble)">
+      <rect x="-200" y="-200" width="1840" height="1300" style="fill:var(--sky)"/>
+      <g transform="rotate(24 720 450)"><rect x="-800" y="-900" width="132" height="2700" style="fill:var(--w4)"/><rect x="-670" y="-900" width="47" height="2700" style="fill:var(--w1)"/><rect x="-625" y="-900" width="122" height="2700" style="fill:var(--w5)"/><rect x="-505" y="-900" width="102" height="2700" style="fill:var(--w7)"/><rect x="-405" y="-900" width="112" height="2700" style="fill:var(--w4)"/><rect x="-295" y="-900" width="72" height="2700" style="fill:var(--w3)"/><rect x="-225" y="-900" width="132" height="2700" style="fill:var(--w5)"/><rect x="-95" y="-900" width="42" height="2700" style="fill:var(--w1)"/><rect x="-55" y="-900" width="112" height="2700" style="fill:var(--w7)"/><rect x="55" y="-900" width="122" height="2700" style="fill:var(--w4)"/><rect x="175" y="-900" width="62" height="2700" style="fill:var(--w2)"/><rect x="235" y="-900" width="112" height="2700" style="fill:var(--w5)"/><rect x="345" y="-900" width="92" height="2700" style="fill:var(--w7)"/><rect x="435" y="-900" width="47" height="2700" style="fill:var(--w1)"/><rect x="480" y="-900" width="132" height="2700" style="fill:var(--w4)"/><rect x="610" y="-900" width="102" height="2700" style="fill:var(--w5)"/><rect x="710" y="-900" width="67" height="2700" style="fill:var(--w3)"/><rect x="775" y="-900" width="122" height="2700" style="fill:var(--w7)"/><rect x="895" y="-900" width="102" height="2700" style="fill:var(--w4)"/><rect x="995" y="-900" width="42" height="2700" style="fill:var(--w1)"/><rect x="1035" y="-900" width="132" height="2700" style="fill:var(--w5)"/><rect x="1165" y="-900" width="57" height="2700" style="fill:var(--w6)"/><rect x="1220" y="-900" width="122" height="2700" style="fill:var(--w4)"/><rect x="1340" y="-900" width="102" height="2700" style="fill:var(--w7)"/><rect x="1440" y="-900" width="112" height="2700" style="fill:var(--w5)"/><rect x="1550" y="-900" width="47" height="2700" style="fill:var(--w1)"/><rect x="1595" y="-900" width="122" height="2700" style="fill:var(--w4)"/><rect x="1715" y="-900" width="62" height="2700" style="fill:var(--w3)"/><rect x="1775" y="-900" width="122" height="2700" style="fill:var(--w5)"/><rect x="1895" y="-900" width="112" height="2700" style="fill:var(--w7)"/><rect x="2005" y="-900" width="102" height="2700" style="fill:var(--w4)"/></g>
+    </g>
   </svg>
-  <i class="bubble-fx" style="--s:74px;--x:6%;--t:34s;--d:-4s"></i>
-  <i class="bubble-fx" style="--s:38px;--x:19%;--t:27s;--d:-15s"></i>
-  <i class="bubble-fx" style="--s:112px;--x:84%;--t:41s;--d:-22s"></i>
-  <i class="bubble-fx" style="--s:52px;--x:93%;--t:30s;--d:-9s"></i>
-  <i class="bubble-fx" style="--s:28px;--x:71%;--t:24s;--d:-18s"></i>
 </div>
 
 <div class="app">
   <nav class="rail glass" aria-label="Views">
-    <span class="logo"></span>
     <a class="nav" id="navPractice" href="#practice" title="Practice">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-4.2L8 19.5v-4h-.5a3 3 0 0 1-3-3z"/><path d="M9 8.6h6M9 11.4h3.6"/></svg>
       練習<small>Practice</small>
@@ -435,7 +353,6 @@
       <div id="practiceView">
         <div class="hero">
           <h1>今日も、話しましょう。</h1>
-          <p>Speak freely. Corrections come afterwards.</p>
         </div>
         <section id="captions" aria-label="Conversation"></section>
         <section id="review" hidden></section>
@@ -803,6 +720,25 @@ function renderStats(s) {
     </section>
 
     <section>
+      <h2>Weak spots</h2>
+      <h3>What to review (recent mistakes count more)</h3>
+      ${s.weak_spots.length ? `<ul class="spots">${s.weak_spots.map((w, i) => `<li>
+          <span class="rank">${i + 1}</span>
+          <span class="what">${w.key
+            ? `<span class="chip">${esc(w.level)}</span><a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.grammar)}</a> <span class="muted">— ${esc(w.meaning)}</span>`
+            : `<span class="chip">type</span>${esc(typeName(w.type))}`}
+            ${w.example ? `<span class="ex">e.g. ${esc(w.example)}</span>` : ""}</span>
+          <span class="n">×${w.count}<br>${shortDay(w.last_seen)}</span>
+        </li>`).join("")}</ul>` : emptyNote("No mistakes recorded yet.")}
+      <h3>Mistakes by type per week</h3>
+      ${typeChart(weeks)}
+      <h3>Fixed</h3>
+      ${!s.fixed_enough_data ? emptyNote("Needs a few more sessions: grammar points you used to miss and haven't missed in your last 3 sessions show up here.")
+        : s.fixed.length ? `<div class="chips">${s.fixed.map(f => `<a class="chip won" href="${esc(f.url)}" target="_blank" rel="noopener" data-tip="Missed ${f.misses}× · last on ${shortDay(f.last_missed)}">✓ ${esc(f.level)} ${esc(f.grammar)}</a>`).join("")}</div>`
+        : emptyNote("Nothing fixed yet. Points you used to miss and haven't missed in your last 3 sessions will appear here.")}
+    </section>
+
+    <section>
       <h2>Habit &amp; volume</h2>
       <h3>Characters spoken per week</h3>
       ${weeks.length ? barChart(weeks, {
@@ -833,25 +769,6 @@ function renderStats(s) {
         line: { value: w => w.mistakes_per_100, color: "var(--accent)", dots: true,
                 tip: w => `Week of ${weekLabel(w)} · ${w.mistakes_per_100} mistakes per 100 characters (${w.issues} in ${w.graded_chars.toLocaleString()})` },
       }) : emptyNote("Needs analyzed sessions.")}
-    </section>
-
-    <section>
-      <h2>Weak spots</h2>
-      <h3>What to review (recent mistakes count more)</h3>
-      ${s.weak_spots.length ? `<ul class="spots">${s.weak_spots.map((w, i) => `<li>
-          <span class="rank">${i + 1}</span>
-          <span class="what">${w.key
-            ? `<span class="chip">${esc(w.level)}</span><a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.grammar)}</a> <span class="muted">— ${esc(w.meaning)}</span>`
-            : `<span class="chip">type</span>${esc(typeName(w.type))}`}
-            ${w.example ? `<span class="ex">e.g. ${esc(w.example)}</span>` : ""}</span>
-          <span class="n">×${w.count}<br>${shortDay(w.last_seen)}</span>
-        </li>`).join("")}</ul>` : emptyNote("No mistakes recorded yet.")}
-      <h3>Mistakes by type per week</h3>
-      ${typeChart(weeks)}
-      <h3>Fixed</h3>
-      ${!s.fixed_enough_data ? emptyNote("Needs a few more sessions: grammar points you used to miss and haven't missed in your last 3 sessions show up here.")
-        : s.fixed.length ? `<div class="chips">${s.fixed.map(f => `<a class="chip won" href="${esc(f.url)}" target="_blank" rel="noopener" data-tip="Missed ${f.misses}× · last on ${shortDay(f.last_missed)}">✓ ${esc(f.level)} ${esc(f.grammar)}</a>`).join("")}</div>`
-        : emptyNote("Nothing fixed yet. Points you used to miss and haven't missed in your last 3 sessions will appear here.")}
     </section>
 
     <section>

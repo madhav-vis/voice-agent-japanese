@@ -29,7 +29,7 @@ A voice AI agent for improving Japanese conversational skill: talk freely, get g
 | `bunpro_grammar_points.csv` | `level,number,grammar,meaning,url`; keys are `"{level}-{number}"` (e.g. `N5-13`). Gitignored (`*.csv`) |
 | `ui_server.py` | Browser UI backend (stdlib `http.server`): serves `index.html`, `GET /api/token` (LiveKit token + new `jp-…` room), `GET /api/review?room=` (`saving` → `analyzing` → `done` + `review.session_review` data + `card`), `GET /api/stats` (`stats.compute_stats`) |
 | `stats.py` | Progress statistics: `compute_stats()` (heatmap, streaks, weekly volume/accuracy/mistake types, correct rate, weak spots, fixed points, JLPT levels, turn length, topics) and `session_card()` for the end-of-session card. `uv run python stats.py` prints the JSON |
-| `index.html` | Browser UI (Frutiger Aero theme: CSS/SVG sky-and-hills scene, glass pane, nav rail 練習/記録): one gel orb (`#btn`) is Start/Stop, shows the agent state by colour/motion and the mic level (`--level` on `#stage`); layout switches on `body[data-phase|data-state|data-view]`; live captions, end-of-session review with session card; Statistics view (`#stats`) with hand-written SVG charts. Plain JS, `livekit-client` UMD pinned on jsDelivr |
+| `index.html` | Browser UI (Frutiger Aero theme: static marbled blue-green swirl background, glass pane, nav rail 練習/記録): one gel orb (`#btn`) is Start/Stop, shows the agent state by colour/motion and the mic level (`--level` on `#stage`); layout switches on `body[data-phase|data-state|data-view]`; live captions, end-of-session review with session card; Statistics view (`#stats`) with hand-written SVG charts. Plain JS, `livekit-client` UMD pinned on jsDelivr |
 | `Code_Documentation.MD` | Older free-form notes |
 
 ## Data flow
