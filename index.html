@@ -2,55 +2,299 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>日本語 Practice</title>
 <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.min.js"></script>
 <style>
+  /* ---------- tokens: day (light) and night (dark) ---------- */
   :root {
-    --bg: #f6f5f2; --panel: #ffffff; --text: #1f1f1f; --muted: #75716b; --line: #e4e1db;
-    --accent: #c8553d; --accent-text: #fff; --me: #2f6f8f; --me-text: #fff; --agent: #ecebe7;
-    --good: #2e7d4f; --bad: #c0392b; --warn: #b7791f;
+    --text: #0b3350; --muted: #35586f; --bg: #ffffff; --panel: #eef9ff; --line: rgba(11, 51, 80, .16);
+    --accent: #0a86cc; --me: #0a86cc; --link: #075f9e; --good: #1c7c2c; --bad: #c2332b; --warn: #9a6200;
+    --glass-a: rgba(255, 255, 255, .76); --glass-b: rgba(255, 255, 255, .48);
+    --rim: rgba(255, 255, 255, .85); --hl: rgba(255, 255, 255, .95); --drop: rgba(8, 70, 130, .42);
+    --inset: rgba(255, 255, 255, .42); --inset-rim: rgba(255, 255, 255, .78);
+    --agent-a: rgba(255, 255, 255, .94); --agent-b: rgba(255, 255, 255, .68);
+    --me-a: rgba(204, 242, 255, .96); --me-b: rgba(126, 214, 250, .82);
+    --sky: linear-gradient(180deg, #0a6bcc 0%, #2b98ea 30%, #7ccff7 56%, #d2f3ff 72%, #f3ffdc 82%);
+    --hill-1a: #9fe27c; --hill-1b: #58bb45; --hill-2a: #86dc52; --hill-2b: #2f9f22; --hill-3a: #b4f070; --hill-3b: #3aa722;
+    --heat-0: rgba(11, 51, 80, .13); --heat-1: #8fd8e8; --heat-2: #3fb9c6; --heat-3: #2aa36a; --heat-4: #157a2e;
+    /* issue types: categorical slots in fixed order */
+    --t-particle: #2a78d6; --t-wa_ga: #eb6834; --t-conjugation: #1baf7a; --t-word_choice: #eda100;
+    --t-register: #e87ba4; --t-filler: #008300; --t-other: #6250d6;
+    /* JLPT levels: ordinal blue ramp, N5 light -> N1 dark */
+    --lv-N5: #86b6ef; --lv-N4: #5598e7; --lv-N3: #2a78d6; --lv-N2: #1c5cab; --lv-N1: #104281;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #161616; --panel: #1f1f1f; --text: #ececec; --muted: #9a958e; --line: #333;
-      --accent: #e0694f; --me: #3a83a8; --agent: #2a2a2a;
-      --good: #5bbf85; --bad: #ef6b5b; --warn: #e2a748;
+      --text: #eaf6ff; --muted: #a8c4d8; --bg: #07162e; --panel: #17304f; --line: rgba(255, 255, 255, .16);
+      --accent: #5cc8ff; --me: #5cc8ff; --link: #86d6ff; --good: #7be08a; --bad: #ff8a7c; --warn: #f2bd5a;
+      --glass-a: rgba(44, 76, 128, .56); --glass-b: rgba(10, 24, 54, .58);
+      --rim: rgba(255, 255, 255, .24); --hl: rgba(255, 255, 255, .34); --drop: rgba(0, 0, 0, .6);
+      --inset: rgba(255, 255, 255, .07); --inset-rim: rgba(255, 255, 255, .16);
+      --agent-a: rgba(255, 255, 255, .17); --agent-b: rgba(255, 255, 255, .08);
+      --me-a: rgba(92, 200, 255, .40); --me-b: rgba(20, 130, 210, .34);
+      --sky: linear-gradient(180deg, #030822 0%, #08204f 34%, #0e4a72 62%, #15746f 80%, #1d8a72 90%);
+      --hill-1a: #12524f; --hill-1b: #0b3238; --hill-2a: #0e3f44; --hill-2b: #07232d; --hill-3a: #0c3039; --hill-3b: #041520;
+      --heat-0: rgba(255, 255, 255, .08); --heat-1: #14505f; --heat-2: #1b8388; --heat-3: #35b67d; --heat-4: #8be88f;
+      --t-particle: #3987e5; --t-wa_ga: #d95926; --t-conjugation: #199e70; --t-word_choice: #c98500;
+      --t-register: #d55181; --t-filler: #0ca30c; --t-other: #9085e9;
+      --lv-N5: #184f95; --lv-N4: #2a78d6; --lv-N3: #5598e7; --lv-N2: #86b6ef; --lv-N1: #b7d3f6;
     }
   }
+  /* registered so the orb's colours can cross-fade between states */
+  @property --o1 { syntax: "<color>"; inherits: true; initial-value: #b9f36b; }
+  @property --o2 { syntax: "<color>"; inherits: true; initial-value: #46c426; }
+  @property --o3 { syntax: "<color>"; inherits: true; initial-value: #0f7d14; }
+
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.6 "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+    margin: 0; color: var(--text); background: #2b98ea; overflow: hidden;
+    font: 16px/1.65 "Hiragino Maru Gothic ProN", Frutiger, "Frutiger Linotype", "Segoe UI", "Myriad Pro", "Lucida Grande",
+      "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
-  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
-  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-  h1 { font-size: 20px; margin: 0 auto 0 0; }
-  button {
-    font: inherit; font-weight: 600; border: 0; border-radius: 999px; padding: 10px 26px;
-    background: var(--accent); color: var(--accent-text); cursor: pointer; min-width: 110px;
+  [hidden] { display: none !important; }
+  a { color: var(--link); text-underline-offset: 3px; }
+  code { font-size: .9em; padding: 1px 6px; border-radius: 6px; background: var(--inset); border: 1px solid var(--inset-rim); }
+  :focus-visible { outline: 3px solid var(--hl); outline-offset: 3px; box-shadow: 0 0 0 6px rgba(10, 134, 204, .55); }
+
+  /* ---------- the scene: sky, light, hills ---------- */
+  .scene { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: var(--sky); }
+  .scene > * { position: absolute; pointer-events: none; }
+  .sun {
+    left: -18vmax; top: -22vmax; width: 70vmax; height: 70vmax;
+    background: radial-gradient(circle, rgba(255, 255, 255, .98) 0, rgba(255, 255, 255, .55) 10%, rgba(255, 255, 240, .2) 32%, transparent 60%);
   }
-  button.stop { background: var(--text); color: var(--bg); }
-  button:disabled { opacity: .5; cursor: default; }
-  .pill {
-    display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
-    background: var(--panel); border: 1px solid var(--line); font-size: 14px; color: var(--muted);
+  .rays {
+    left: -42vmax; top: -46vmax; width: 120vmax; height: 120vmax;
+    background: repeating-conic-gradient(from 96deg, rgba(255, 255, 255, .13) 0 3deg, transparent 3deg 11deg, rgba(255, 255, 255, .07) 11deg 12.5deg, transparent 12.5deg 21deg);
+    -webkit-mask: radial-gradient(circle, #000 4%, transparent 58%); mask: radial-gradient(circle, #000 4%, transparent 58%);
+    animation: turn 240s linear infinite;
   }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); transition: background .15s, transform .15s; }
-  .dot.on { background: var(--good); transform: scale(1.3); }
-  .pill[data-state="speaking"] { color: var(--accent); border-color: var(--accent); }
-  .pill[data-state="thinking"] { color: var(--warn); border-color: var(--warn); }
-  .pill[data-state="listening"] { color: var(--good); border-color: var(--good); }
-  section {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px;
+  .cloud {
+    width: 620px; height: 150px; filter: blur(16px); opacity: .9;
+    background:
+      radial-gradient(closest-side, #fff, transparent) 0 40px / 300px 110px no-repeat,
+      radial-gradient(closest-side, #fff, transparent) 150px 0 / 320px 150px no-repeat,
+      radial-gradient(closest-side, #fff, transparent) 330px 46px / 290px 100px no-repeat;
+    animation: drift 110s ease-in-out infinite alternate;
   }
-  #captions { height: 52vh; min-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-  .empty { color: var(--muted); margin: auto; text-align: center; }
-  .bubble { max-width: 82%; padding: 8px 14px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; }
-  .bubble.agent { align-self: flex-start; background: var(--agent); border-bottom-left-radius: 4px; }
-  .bubble.me { align-self: flex-end; background: var(--me); color: var(--me-text); border-bottom-right-radius: 4px; }
+  .cloud.c1 { top: 12%; left: 46%; }
+  .cloud.c2 { top: 34%; left: -6%; transform: scale(.7); opacity: .7; animation-duration: 150s; animation-direction: alternate-reverse; }
+  .cloud.c3 { top: 50%; left: 70%; transform: scale(.55); opacity: .6; animation-duration: 130s; }
+  .aurora, .stars { display: none; }
+  .bubble-fx {
+    border-radius: 50%; width: var(--s); height: var(--s); left: var(--x); bottom: -160px;
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255, 255, 255, .95) 0 6%, transparent 15%),
+      radial-gradient(circle at 50% 50%, transparent 52%, rgba(255, 255, 255, .28) 66%, rgba(255, 255, 255, .75) 70%, transparent 72%),
+      radial-gradient(circle at 68% 74%, rgba(190, 240, 255, .5), transparent 44%);
+    animation: rise var(--t) linear infinite; animation-delay: var(--d);
+  }
+  .hills { left: 0; bottom: 0; width: 100%; height: 38vh; min-height: 220px; }
+  .hills .far { filter: blur(5px); }
+  .hills .mid { filter: blur(2.5px); }
+  /* the sky holds still during a session: moving it re-blurs the glass every frame, and local TTS needs the machine */
+  body[data-phase="live"] .scene > * { animation-play-state: paused; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+  @keyframes drift { from { translate: -5vw 0; } to { translate: 7vw 0; } }
+  @keyframes rise {
+    0% { transform: translate(0, 0); opacity: 0; } 8% { opacity: .9; }
+    50% { transform: translate(28px, -62vh); } 92% { opacity: .9; }
+    100% { transform: translate(-14px, -125vh); opacity: 0; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #08204f; }
+    .sun {  /* the moon */
+      right: 4vw; top: 3vh; width: 34vmin; height: 34vmin; left: auto;
+      background: radial-gradient(circle, rgba(236, 246, 255, .95) 0 9%, rgba(190, 225, 255, .28) 12%, rgba(150, 205, 255, .1) 34%, transparent 62%);
+    }
+    .rays, .cloud { display: none; }
+    .aurora {
+      display: block; left: -10%; right: -10%; top: 6%; height: 52%; filter: blur(46px); opacity: .8;
+      background:
+        radial-gradient(60% 34% at 30% 46%, rgba(70, 255, 170, .55), transparent 70%),
+        radial-gradient(50% 26% at 68% 34%, rgba(60, 220, 255, .5), transparent 70%),
+        radial-gradient(40% 20% at 52% 70%, rgba(120, 255, 200, .35), transparent 70%);
+      animation: sway 26s ease-in-out infinite alternate;
+    }
+    .stars {
+      display: block; inset: 0 0 40% 0; opacity: .85;
+      background-image:
+        radial-gradient(1.2px 1.2px at 12% 18%, #fff, transparent 60%), radial-gradient(1px 1px at 27% 42%, #fff, transparent 60%),
+        radial-gradient(1.4px 1.4px at 41% 12%, #fff, transparent 60%), radial-gradient(1px 1px at 58% 30%, #fff, transparent 60%),
+        radial-gradient(1.3px 1.3px at 73% 9%, #fff, transparent 60%), radial-gradient(1px 1px at 86% 38%, #fff, transparent 60%),
+        radial-gradient(1.1px 1.1px at 94% 16%, #fff, transparent 60%), radial-gradient(1px 1px at 6% 56%, #fff, transparent 60%),
+        radial-gradient(1.2px 1.2px at 49% 58%, #fff, transparent 60%), radial-gradient(1px 1px at 66% 62%, #fff, transparent 60%);
+    }
+    .bubble-fx {  /* fireflies */
+      width: 7px; height: 7px; background: radial-gradient(circle, #eaffb0 0 30%, rgba(190, 255, 120, .5) 45%, transparent 70%);
+      box-shadow: 0 0 14px 4px rgba(190, 255, 120, .35);
+    }
+  }
+  @keyframes sway { from { transform: translateX(-4%) skewX(-6deg); } to { transform: translateX(4%) skewX(7deg) scaleY(1.12); } }
+
+  /* ---------- glass and gel ---------- */
+  .glass {
+    position: relative; border-radius: 34px; border: 1px solid var(--rim);
+    background: linear-gradient(180deg, var(--glass-a) 0%, var(--glass-b) 46%, var(--glass-b) 100%);
+    -webkit-backdrop-filter: blur(24px) saturate(175%); backdrop-filter: blur(24px) saturate(175%);
+    box-shadow: inset 0 1px 0 var(--hl), inset 0 -22px 44px -30px var(--hl), 0 28px 64px -22px var(--drop), 0 2px 6px rgba(8, 50, 100, .14);
+  }
+  .glass::before {  /* the curved top sheen */
+    content: ""; position: absolute; inset: 1px 1px auto 1px; height: 84px; pointer-events: none; z-index: 0;
+    border-radius: 33px 33px 60% 60% / 33px 33px 26px 26px;
+    background: linear-gradient(180deg, var(--hl), transparent); opacity: .42;
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    :root { --glass-a: rgba(255, 255, 255, .93); --glass-b: rgba(240, 250, 255, .88); }
+    @media (prefers-color-scheme: dark) { :root { --glass-a: rgba(26, 48, 88, .95); --glass-b: rgba(10, 24, 54, .95); } }
+  }
+
+  /* ---------- shell ---------- */
+  .app {
+    height: 100vh; height: 100dvh; max-width: 1120px; margin: 0 auto;
+    padding: clamp(12px, 3.4vh, 36px) clamp(12px, 3vw, 40px);
+    display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px;
+  }
+  .rail { align-self: start; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 10px; border-radius: 30px; }
+  .rail::before { border-radius: 29px 29px 50% 50% / 29px 29px 18px 18px; height: 60px; }
+  .logo {
+    width: 30px; height: 30px; margin: 6px 0 12px; border-radius: 0 50% 50% 50%; transform: rotate(45deg); position: relative; z-index: 1;
+    background: radial-gradient(circle at 62% 62%, #a8ecff 0, #1fa8ea 55%, #0562a8 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5), 0 5px 12px -3px rgba(5, 98, 168, .7);
+  }
+  .logo::after { content: ""; position: absolute; left: 34%; top: 34%; width: 40%; height: 26%; border-radius: 50%; background: rgba(255, 255, 255, .85); transform: rotate(-45deg); }
+  .nav {
+    position: relative; z-index: 1; width: 74px; padding: 10px 0 8px; border-radius: 22px; border: 1px solid transparent;
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    color: var(--muted); text-decoration: none; font-size: 14px; line-height: 1.3; transition: background .2s, color .2s;
+  }
+  .nav svg { width: 24px; height: 24px; margin-bottom: 3px; }
+  .nav small { font-size: 10.5px; letter-spacing: .04em; opacity: .85; font-family: Frutiger, "Segoe UI", "Lucida Grande", system-ui, sans-serif; }
+  .nav:hover { background: var(--inset); color: var(--text); }
+  .nav[aria-current] {
+    color: #fff; border-color: rgba(255, 255, 255, .55);
+    background: linear-gradient(180deg, #6fd2fb 0%, #1b9be3 48%, #0b78c6 52%, #2aa9ea 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), 0 8px 16px -8px rgba(5, 98, 168, .8);
+    text-shadow: 0 1px 1px rgba(0, 50, 100, .45);
+  }
+
+  .pane { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .scroll {
+    position: relative; z-index: 1; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+    -webkit-mask: linear-gradient(transparent, #000 22px, #000 calc(100% - 22px), transparent);
+    mask: linear-gradient(transparent, #000 22px, #000 calc(100% - 22px), transparent);
+  }
+  .scroll > div { max-width: 780px; margin: 0 auto; padding: 30px clamp(16px, 3vw, 30px) 26px; }
+  .hero { display: none; text-align: center; }
+  .hero h1 { margin: 0; font-size: clamp(26px, 4.2vw, 38px); font-weight: 300; letter-spacing: .06em; line-height: 1.35; }
+  .hero p { margin: 10px 0 0; color: var(--muted); font-size: 15px; font-family: Frutiger, "Segoe UI", "Lucida Grande", system-ui, sans-serif; }
+
+  /* ---------- the dock and the orb ---------- */
+  .stage {
+    --level: 0; --orb: 62px; --o1: #b9f36b; --o2: #46c426; --o3: #0f7d14; --glow: rgba(30, 150, 30, .6);
+    position: relative; z-index: 1; flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px;
+    padding: 12px 26px 14px; border-top: 1px solid var(--inset-rim);
+    background: linear-gradient(180deg, var(--inset), transparent);
+    transition: --o1 .5s, --o2 .5s, --o3 .5s;
+  }
+  body[data-phase="connecting"] .stage, body[data-phase="live"] .stage { --o1: #a8ecff; --o2: #1fa8ea; --o3: #0562a8; --glow: rgba(10, 120, 210, .6); }
+  body[data-phase="live"][data-state="thinking"] .stage { --o1: #fff2a8; --o2: #ffb520; --o3: #c56a00; --glow: rgba(230, 150, 0, .55); }
+  body[data-phase="live"][data-state="speaking"] .stage { --o1: #c8fff1; --o2: #19c7ae; --o3: #04807a; --glow: rgba(0, 160, 150, .55); }
+  body[data-view="stats"]:not([data-phase="live"]) .stage { display: none; }
+
+  .status { justify-self: start; min-width: 0; font-size: 17px; letter-spacing: .04em; }
+  .orb {
+    width: var(--orb); height: var(--orb); padding: 0; border: 0; border-radius: 50%; position: relative; cursor: pointer; color: #fff;
+    background:
+      radial-gradient(92% 62% at 50% 102%, var(--o1) 0%, transparent 72%),
+      radial-gradient(circle at 50% 34%, var(--o2) 0%, var(--o2) 34%, var(--o3) 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, .4),
+      inset 0 calc(var(--orb) * .06) calc(var(--orb) * .12) rgba(0, 0, 0, .2),
+      0 0 0 calc(var(--orb) * .04) rgba(255, 255, 255, .62),
+      0 0 0 calc(var(--orb) * .04 + 1px) rgba(255, 255, 255, .9),
+      0 calc(var(--orb) * .12) calc(var(--orb) * .26) calc(var(--orb) * -.04) var(--glow);
+    transition: transform .12s ease-out, filter .3s, opacity .3s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .orb::before {  /* specular highlight */
+    content: ""; position: absolute; left: 11%; right: 11%; top: 4%; height: 47%; border-radius: 50%; z-index: 2; pointer-events: none;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(255, 255, 255, .1));
+  }
+  .orb:hover:not(:disabled) { filter: brightness(1.08) saturate(1.1); }
+  .orb:active:not(:disabled) { transform: scale(.96); }
+  .orb:disabled { cursor: default; }
+  body[data-phase="reviewing"] .orb { filter: saturate(.45); opacity: .6; }
+  .orb svg { position: absolute; inset: 0; margin: auto; width: 40%; height: 40%; z-index: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .35)); display: none; }
+  body:is([data-phase="idle"], [data-phase="reviewing"]) .orb .play { display: block; left: 5%; }
+  body[data-phase="live"] .orb .stop { display: block; width: 32%; height: 32%; }
+  .swirl {  /* caustics turning inside the orb */
+    position: absolute; inset: 0; border-radius: 50%; opacity: 0; transition: opacity .4s; pointer-events: none;
+    background: conic-gradient(from 0deg, transparent 0, rgba(255, 255, 255, .7) 18%, transparent 40%, rgba(255, 255, 255, .4) 62%, transparent 82%);
+    animation: turn 2.2s linear infinite paused;
+  }
+  /* Only while connecting. Once the agent is in the room nothing on the page animates continuously:
+     every frame costs CPU that the local TTS needs (measured: ~50% of a core with animations, ~0 without) */
+  body[data-phase="connecting"] .swirl, body[data-phase="live"][data-state="initializing"] .swirl { opacity: 1; animation-play-state: running; }
+  .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .85); opacity: 0; pointer-events: none; }
+  body[data-phase="live"] .ring.lvl {  /* grows with your voice */
+    opacity: calc(.15 + var(--level) * .75); transform: scale(calc(1.16 + var(--level) * .5)); transition: transform .1s ease-out, opacity .1s;
+    box-shadow: 0 0 calc(var(--orb) * .2) var(--glow);
+  }
+  .ring.rip { transition: transform .5s ease-out, opacity .5s; }
+  body[data-phase="live"][data-state="speaking"] .ring.rip { opacity: .6; transform: scale(1.24); }  /* still rings, not a loop */
+  body[data-phase="live"][data-state="speaking"] .ring.rip + .ring.rip { opacity: .3; transform: scale(1.5); }
+
+  .eq { justify-self: end; display: flex; align-items: center; gap: 4px; height: 40px; visibility: hidden; }
+  body[data-phase="live"] .eq { visibility: visible; }
+  .eq i {
+    width: 5px; height: calc(5px + var(--level) * var(--k) * 1px); border-radius: 3px; transition: height .09s ease-out, background .2s;
+    background: linear-gradient(180deg, #fff, var(--o2)); box-shadow: 0 0 0 1px var(--inset-rim); opacity: .85;
+  }
+  .stage.voiced .eq i { background: linear-gradient(180deg, #eaffc0, #46c426); opacity: 1; }
+
+  /* first visit: nothing but a greeting and the orb */
+  body[data-view="practice"]:is([data-phase="idle"], [data-phase="connecting"]):not(:has(#captions > *)):not(:has(#review:not([hidden]))) {
+    .pane { justify-content: center; }
+    .scroll { flex: none; -webkit-mask: none; mask: none; }
+    .scroll > div { padding-bottom: 0; }
+    .hero { display: block; }
+    .stage { --orb: clamp(132px, 22vh, 176px); display: flex; flex-direction: column; gap: 30px; border: 0; background: none; padding: 44px 20px 40px; }
+    .orb { order: -1; }
+    .status { justify-self: auto; color: var(--muted); font-size: 16px; }
+    .eq { display: none; }
+    .orb:not(:disabled) { animation: breathe 5s ease-in-out infinite; }
+  }
+  @keyframes breathe { 50% { transform: scale(1.035); } }
+
+  /* ---------- captions ---------- */
+  #captions { display: flex; flex-direction: column; gap: 12px; }
+  #captions:empty { display: none; }
+  .bubble {
+    max-width: 82%; padding: 9px 17px; border-radius: 22px; white-space: pre-wrap; word-break: break-word; font-size: 17px; line-height: 1.7;
+    border: 1px solid var(--inset-rim); animation: pop .28s ease-out;
+  }
+  .bubble.agent {
+    align-self: flex-start; border-bottom-left-radius: 6px; background: linear-gradient(180deg, var(--agent-a), var(--agent-b));
+    box-shadow: inset 0 1px 0 var(--hl), 0 8px 18px -10px var(--drop);
+  }
+  .bubble.me {
+    align-self: flex-end; border-bottom-right-radius: 6px; background: linear-gradient(180deg, var(--me-a), var(--me-b));
+    box-shadow: inset 0 1px 0 var(--hl), inset 0 14px 14px -12px var(--hl), 0 8px 18px -10px var(--drop);
+  }
   .bubble .interim { opacity: .55; }
-  #review h2 { font-size: 17px; margin: 0 0 8px; }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+
+  /* ---------- panels (review, statistics) ---------- */
+  section:not(#captions) {
+    background: var(--inset); border: 1px solid var(--inset-rim); border-radius: 24px; padding: 18px 20px; margin-bottom: 16px;
+    box-shadow: inset 0 1px 0 var(--hl);
+  }
+  #review { margin-top: 18px; scroll-margin-top: 12px; }
+  h2 { font-size: 18px; font-weight: 500; letter-spacing: .03em; margin: 0 0 8px; }
   .score { color: var(--muted); margin-bottom: 12px; }
   .turn { border-top: 1px solid var(--line); padding: 12px 0; }
   .turn:first-of-type { border-top: 0; }
@@ -60,123 +304,171 @@
   .fixed .mark { font-weight: 700; margin-right: 6px; }
   ul { margin: 6px 0 0; padding-left: 22px; }
   li { margin: 4px 0; font-size: 15px; }
-  .type { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-left: 4px; }
+  .type, .chip {
+    display: inline-block; font-size: 12px; color: var(--muted); border: 1px solid var(--inset-rim); border-radius: 999px; padding: 0 8px;
+    background: var(--inset); text-decoration: none;
+  }
+  .type { margin-left: 6px; }
+  .chip { margin-right: 6px; }
   .note { color: var(--muted); }
   .bunpro { display: block; font-size: 14px; }
-  a { color: var(--me); }
   .muted { color: var(--muted); }
-  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; vertical-align: -1px; margin-right: 8px; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .meter { display: flex; align-items: center; gap: 10px; margin: -6px 0 14px; font-size: 13px; color: var(--muted); }
-  .meter div { flex: 1; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
-  .meter i { display: block; height: 100%; width: 0; background: var(--good); transition: width .06s linear; }
-  [hidden] { display: none !important; }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: turn 1s linear infinite; vertical-align: -1px; margin-right: 8px; }
 
   /* ---------- statistics ---------- */
-  :root {
-    --heat-0: #ebe8e2; --heat-1: #f2c4b5; --heat-2: #e6927a; --heat-3: #c8553d; --heat-4: #8f3420;
-    /* issue types: categorical slots in fixed order */
-    --t-particle: #2a78d6; --t-wa_ga: #eb6834; --t-conjugation: #1baf7a; --t-word_choice: #eda100;
-    --t-register: #e87ba4; --t-filler: #008300; --t-other: #6250d6;
-    /* JLPT levels: ordinal blue ramp, N5 light -> N1 dark */
-    --lv-N5: #86b6ef; --lv-N4: #5598e7; --lv-N3: #2a78d6; --lv-N2: #1c5cab; --lv-N1: #104281;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --heat-0: #2a2a2a; --heat-1: #5a2e24; --heat-2: #8f4130; --heat-3: #c85a42; --heat-4: #f08a6e;
-      --t-particle: #3987e5; --t-wa_ga: #d95926; --t-conjugation: #199e70; --t-word_choice: #c98500;
-      --t-register: #d55181; --t-filler: #0ca30c; --t-other: #9085e9;
-      --lv-N5: #184f95; --lv-N4: #2a78d6; --lv-N3: #5598e7; --lv-N2: #86b6ef; --lv-N1: #b7d3f6;
-    }
-  }
-  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); padding: 9px 22px; }
-  button.secondary.active { border-color: var(--text); }
-  #statsView h2 { font-size: 17px; margin: 0 0 4px; }
   #statsView h3 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; color: var(--muted); }
   #statsView h3:first-of-type { margin-top: 10px; }
   .sub { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
-  .heat-wrap { overflow-x: auto; padding-bottom: 4px; }
+  .heat-wrap { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
   .heat-wrap svg { display: block; }
   .heat-legend { display: flex; align-items: center; gap: 3px; justify-content: flex-end; font-size: 12px; color: var(--muted); margin-top: 6px; }
-  .heat-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .heat-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
   .heat-legend span { margin: 0 4px; }
-  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
-  .tile { text-align: center; padding: 8px 4px; border-radius: 10px; background: var(--bg); }
-  .tile b { display: block; font-size: 20px; line-height: 1.3; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+  .tile {
+    text-align: center; padding: 10px 6px; border-radius: 20px; border: 1px solid var(--inset-rim);
+    background: linear-gradient(180deg, var(--agent-a), var(--agent-b) 55%, var(--inset));
+    box-shadow: inset 0 1px 0 var(--hl), 0 8px 16px -12px var(--drop);
+  }
+  .tile b { display: block; font-size: 21px; font-weight: 500; line-height: 1.35; }
   .tile span { font-size: 12px; color: var(--muted); }
-  @media (max-width: 520px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
   svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
   svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
   .grid { stroke: var(--line); stroke-width: 1; }
   .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); margin: 2px 0 6px; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
   .legend i.line { height: 2px; vertical-align: 3px; width: 14px; }
   .spots { list-style: none; padding: 0; margin: 0; }
-  .spots li { display: flex; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); margin: 0; }
+  .spots li { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--line); margin: 0; }
   .spots li:first-child { border-top: 0; }
   .spots .rank { color: var(--muted); width: 1.4em; text-align: right; flex: none; }
   .spots .what { flex: 1; min-width: 0; }
   .spots .ex { display: block; font-size: 13px; color: var(--muted); }
   .spots .n { color: var(--muted); font-size: 13px; flex: none; text-align: right; }
-  .chip { display: inline-block; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 4px; color: var(--muted); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chips .topic { font-size: 13px; background: var(--bg); border-radius: 999px; padding: 3px 10px; }
-  .won { color: var(--good); border-color: var(--good); }
+  .chips .chip { margin: 0; }
+  .chips .topic { font-size: 13px; background: var(--inset); border: 1px solid var(--inset-rim); border-radius: 999px; padding: 3px 12px; }
+  .won { color: var(--good); border-color: var(--good); padding: 2px 10px; }
   .lvl-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 13px; }
   .lvl-row .m { width: 76px; color: var(--muted); flex: none; white-space: nowrap; }
   .lvl-row .bar { flex: 1; display: flex; gap: 2px; height: 14px; }
   .lvl-row .bar i { display: block; height: 100%; }
-  .lvl-row .bar i:first-child { border-radius: 4px 0 0 4px; }
-  .lvl-row .bar i:last-child { border-radius: 0 4px 4px 0; }
-  .lvl-row .bar i:only-child { border-radius: 4px; }
+  .lvl-row .bar i:first-child { border-radius: 7px 0 0 7px; }
+  .lvl-row .bar i:last-child { border-radius: 0 7px 7px 0; }
+  .lvl-row .bar i:only-child { border-radius: 7px; }
   .lvl-row .t { width: 2.5em; color: var(--muted); text-align: right; flex: none; }
   #tip {
     position: fixed; pointer-events: none; z-index: 10; background: var(--text); color: var(--bg);
-    font-size: 13px; padding: 5px 9px; border-radius: 8px; white-space: nowrap; transform: translate(-50%, calc(-100% - 10px));
+    font-size: 13px; padding: 5px 11px; border-radius: 999px; white-space: nowrap; transform: translate(-50%, calc(-100% - 10px));
+    box-shadow: 0 8px 18px -8px var(--drop);
   }
   /* per-session card */
-  .card-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
-  .card-row .tile b { font-size: 18px; }
+  .card-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+  .card-row .tile b { font-size: 19px; }
   .delta { font-size: 12px; }
   .delta.up { color: var(--good); }
   .delta.down { color: var(--bad); }
   .longest { font-size: 14px; color: var(--muted); margin: 0 0 6px; }
   .longest q { color: var(--text); quotes: "「" "」"; }
   .todo { font-size: 14px; margin: 0 0 12px; }
+
+  /* ---------- small screens: the rail lies down on top ---------- */
+  @media (max-width: 720px) {
+    .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 10px; padding: 10px; }
+    .rail { flex-direction: row; justify-content: center; align-self: auto; padding: 6px 12px; border-radius: 26px; }
+    .rail::before { display: none; }
+    .logo { margin: 0 auto 0 8px; width: 24px; height: 24px; }
+    .nav { flex-direction: row; width: auto; gap: 7px; padding: 7px 14px; }
+    .nav svg { margin: 0; width: 20px; height: 20px; }
+    .nav small { display: none; }
+    .glass { border-radius: 28px; }
+    .stage { padding: 10px 16px 12px; gap: 10px; }
+    .status { font-size: 15px; }
+    .bubble { max-width: 90%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .bubble-fx { display: none; }
+  }
 </style>
 </head>
-<body>
-<main>
-  <header>
-    <h1>日本語 会話練習</h1>
-    <span class="pill" id="pill" data-state="idle"><span class="dot" id="micDot" title="you are speaking"></span><span id="pillText">待機中</span></span>
-    <button id="btn">Start</button>
-    <button id="statsBtn" class="secondary" aria-pressed="false">Statistics</button>
-  </header>
-  <div class="meter" hidden title="microphone level"><span>mic</span><div><i id="micLevel"></i></div></div>
+<body data-phase="idle" data-state="idle" data-view="practice">
+<div class="scene" aria-hidden="true">
+  <div class="sun"></div>
+  <div class="rays"></div>
+  <div class="stars"></div>
+  <div class="aurora"></div>
+  <div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div>
+  <svg class="hills" viewBox="0 0 1440 400" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="h1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--hill-1a)"/><stop offset="1" style="stop-color:var(--hill-1b)"/></linearGradient>
+      <linearGradient id="h2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--hill-2a)"/><stop offset="1" style="stop-color:var(--hill-2b)"/></linearGradient>
+      <linearGradient id="h3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--hill-3a)"/><stop offset="1" style="stop-color:var(--hill-3b)"/></linearGradient>
+    </defs>
+    <path class="far" fill="url(#h1)" d="M-20,220 C240,120 420,140 640,195 C860,250 1080,120 1460,175 L1460,420 L-20,420Z"/>
+    <path class="mid" fill="url(#h2)" d="M-20,290 C200,225 380,305 620,275 C900,238 1100,305 1460,235 L1460,420 L-20,420Z"/>
+    <path fill="url(#h3)" d="M-20,345 C260,292 520,365 800,334 C1050,306 1250,354 1460,322 L1460,420 L-20,420Z"/>
+  </svg>
+  <i class="bubble-fx" style="--s:74px;--x:6%;--t:34s;--d:-4s"></i>
+  <i class="bubble-fx" style="--s:38px;--x:19%;--t:27s;--d:-15s"></i>
+  <i class="bubble-fx" style="--s:112px;--x:84%;--t:41s;--d:-22s"></i>
+  <i class="bubble-fx" style="--s:52px;--x:93%;--t:30s;--d:-9s"></i>
+  <i class="bubble-fx" style="--s:28px;--x:71%;--t:24s;--d:-18s"></i>
+</div>
 
-  <div id="practiceView">
-    <section id="captions"><p class="empty" id="emptyHint">Press Start to begin</p></section>
-    <section id="review" hidden></section>
-  </div>
+<div class="app">
+  <nav class="rail glass" aria-label="Views">
+    <span class="logo"></span>
+    <a class="nav" id="navPractice" href="#practice" title="Practice">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-4.2L8 19.5v-4h-.5a3 3 0 0 1-3-3z"/><path d="M9 8.6h6M9 11.4h3.6"/></svg>
+      練習<small>Practice</small>
+    </a>
+    <a class="nav" id="navStats" href="#stats" title="Statistics">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.5v-6M12 19.5v-14M19 19.5v-9.5"/></svg>
+      記録<small>Statistics</small>
+    </a>
+  </nav>
 
-  <div id="statsView" hidden></div>
-</main>
+  <main class="pane glass">
+    <div class="scroll" id="scroll">
+      <div id="practiceView">
+        <div class="hero">
+          <h1>今日も、話しましょう。</h1>
+          <p>Speak freely. Corrections come afterwards.</p>
+        </div>
+        <section id="captions" aria-label="Conversation"></section>
+        <section id="review" hidden></section>
+      </div>
+      <div id="statsView" hidden></div>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="status" id="pillText" aria-live="polite">はじめる</div>
+      <button class="orb" id="btn" aria-label="Start">
+        <i class="swirl"></i><i class="ring lvl"></i><i class="ring rip"></i><i class="ring rip"></i>
+        <svg class="play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.6c0-1 1.1-1.6 2-1.1l11 6.4c.9.5.9 1.7 0 2.2L9 18.500c-.9.5-2-.1-2-1.1z" transform="translate(-1.5 .9)"/></svg>
+        <svg class="stop" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="4.5"/></svg>
+      </button>
+      <div class="eq" aria-hidden="true" title="microphone level"><i style="--k:14"></i><i style="--k:26"></i><i style="--k:34"></i><i style="--k:22"></i><i style="--k:12"></i></div>
+    </div>
+  </main>
+</div>
 <div id="tip" hidden></div>
 
 <script>
 const { Room, RoomEvent, ParticipantEvent, Track, ParticipantKind } = LivekitClient;
 
 const btn = document.getElementById("btn");
-const pill = document.getElementById("pill");
+const stage = document.getElementById("stage");      // dock: orb + state label + mic bars
+const scroller = document.getElementById("scroll");
 const pillText = document.getElementById("pillText");
-const micDot = document.getElementById("micDot");
 const captions = document.getElementById("captions");
 const reviewEl = document.getElementById("review");
 
 const STATE_LABELS = {
-  idle: "待機中", connecting: "接続中…", initializing: "準備中…",
-  listening: "聞いています", thinking: "考えています", speaking: "話しています", ended: "終了",
+  idle: "はじめる", connecting: "接続中…", initializing: "準備中…",
+  listening: "聞いています", thinking: "考えています", speaking: "話しています", ended: "おつかれさまでした",
 };
 
 let room = null;
@@ -185,7 +477,7 @@ let phase = "idle";          // idle | connecting | live | reviewing
 const bubbles = new Map();   // segment id -> element
 
 function setState(state) {
-  pill.dataset.state = state;
+  document.body.dataset.state = state;  // the orb's colour and motion follow this in CSS
   pillText.textContent = STATE_LABELS[state] || state;
 }
 
@@ -194,9 +486,10 @@ function setPhase(next) {
   const onStats = !document.getElementById("statsView").hidden;
   // Start only works from the practice view; a live session can still be stopped from anywhere
   btn.disabled = next === "connecting" || next === "reviewing" || (onStats && next !== "live");
-  btn.title = onStats && next !== "live" ? "Go back to Practice to start a session" : "";
-  btn.textContent = next === "live" ? "Stop" : next === "connecting" ? "..." : "Start";
-  btn.classList.toggle("stop", next === "live");
+  document.body.dataset.phase = next;   // layout (hero vs dock) and the orb's glyph follow this in CSS
+  const label = next === "live" ? "Stop" : next === "connecting" ? "Connecting" : "Start";
+  btn.setAttribute("aria-label", label);
+  btn.title = label;
 }
 
 function esc(s) {
@@ -224,8 +517,8 @@ function showCaption(segmentId, text, isMe, final) {
   t.segs.set(segmentId, { text, final: final || !isMe });
   t.el.innerHTML = [...t.segs.values()]
     .map(s => `<span${s.final ? "" : ' class="interim"'}>${esc(s.text)}</span>`).join("");
-  const nearBottom = captions.scrollHeight - captions.scrollTop - captions.clientHeight < 120;
-  if (nearBottom) captions.scrollTop = captions.scrollHeight;
+  const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 140;
+  if (nearBottom) scroller.scrollTop = scroller.scrollHeight;
 }
 
 // The agent sends one stream per segment with text deltas; the user's speech arrives as a new
@@ -295,7 +588,7 @@ async function start() {
     await room.connect(url, token);
     await room.startAudio();  // inside the click, so autoplay is allowed
     await room.localParticipant.publishTrack(micTrack, { source: Track.Source.Microphone });
-    room.localParticipant.on(ParticipantEvent.IsSpeakingChanged, (speaking) => micDot.classList.toggle("on", speaking));
+    room.localParticipant.on(ParticipantEvent.IsSpeakingChanged, (speaking) => stage.classList.toggle("voiced", speaking));
 
     // agent may already be in the room
     const agent = [...room.remoteParticipants.values()].find(p => p.kind === ParticipantKind.AGENT);
@@ -324,14 +617,19 @@ function showMicLevel(mediaStreamTrack) {
   analyser.fftSize = 512;
   ctx.createMediaStreamSource(new MediaStream([mediaStreamTrack])).connect(analyser);
   const buf = new Uint8Array(analyser.fftSize);
-  const bar = document.getElementById("micLevel");
-  bar.parentElement.hidden = false;
-  meter = { ctx, raf: 0 };
+  meter = { ctx, raf: 0, level: 0, at: 0 };
   const tick = () => {
     analyser.getByteTimeDomainData(buf);
     let peak = 0;
     for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
-    bar.style.width = Math.min(100, peak / 128 * 250) + "%";
+    // 0..1 in steps of 0.1, written at most ~8 times a second and only when it changes, so a quiet mic
+    // causes no redraws at all. The ring around the orb and the bars in the dock scale with it in CSS
+    const level = Math.round(Math.min(1, peak / 128 * 2.5) * 10) / 10;
+    const now = performance.now();
+    if (level !== meter.level && now - meter.at > 120) {
+      meter.level = level; meter.at = now;
+      stage.style.setProperty("--level", level);
+    }
     meter.raf = requestAnimationFrame(tick);
   };
   tick();
@@ -341,7 +639,7 @@ function stopMicLevel() {
   cancelAnimationFrame(meter.raf);
   meter.ctx.close();
   meter = null;
-  document.getElementById("micLevel").parentElement.hidden = true;
+  stage.style.setProperty("--level", 0);
 }
 
 async function stop() {
@@ -349,10 +647,11 @@ async function stop() {
 }
 
 function ended() {
-  if (phase !== "live" && phase !== "connecting") return;
+  // a failed connect also fires Disconnected; start()'s catch reports that, there is nothing to review
+  if (phase !== "live") return;
   document.querySelectorAll("audio[data-lk]").forEach(el => el.remove());
   stopMicLevel();
-  micDot.classList.remove("on");
+  stage.classList.remove("voiced");
   setState("ended");
   room = null;
   setPhase("reviewing");
@@ -375,6 +674,7 @@ async function pollReview(name) {
     if (data.status === "done") {
       renderReview(data);
       setPhase("idle");
+      reviewEl.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     const msg = data.status === "saving" ? "Saving the conversation..."
@@ -412,7 +712,7 @@ function renderReview(r) {
     ? `<h2 style="margin-top:16px">Patterns</h2><ul>${r.patterns.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : "";
   reviewEl.innerHTML = `<h2>Review · ${esc(r.date)}</h2>
     ${r.card ? sessionCard(r.card, r) : `<div class="score">${r.correct}/${r.judged} turns correct</div>`}
-    ${turns || `<p class="muted">No mistakes this time. 🎉</p>`}
+    ${turns || `<p class="muted">No mistakes this time. よくできました。</p>`}
     ${patterns}`;
 }
 
@@ -435,7 +735,6 @@ function sessionCard(c, r) {
 }
 
 // ---------- statistics view ----------
-const statsBtn = document.getElementById("statsBtn");
 const statsView = document.getElementById("statsView");
 const practiceView = document.getElementById("practiceView");
 const tip = document.getElementById("tip");
@@ -456,13 +755,13 @@ const emptyNote = msg => `<p class="muted" style="font-size:14px">${msg}</p>`;
 function showView(stats) {
   statsView.hidden = !stats;
   practiceView.hidden = stats;
-  statsBtn.classList.toggle("active", stats);
-  statsBtn.setAttribute("aria-pressed", stats);
-  statsBtn.textContent = stats ? "Practice" : "Statistics";
+  document.body.dataset.view = stats ? "stats" : "practice";
+  document.getElementById("navStats").toggleAttribute("aria-current", stats);
+  document.getElementById("navPractice").toggleAttribute("aria-current", !stats);
+  scroller.scrollTop = 0;
   setPhase(phase);  // grey out Start while on the stats view
   if (stats) loadStats();
 }
-statsBtn.addEventListener("click", () => { location.hash = statsView.hidden ? "stats" : ""; });
 window.addEventListener("hashchange", () => showView(location.hash === "#stats"));
 
 // one shared hover tooltip for every element with data-tip

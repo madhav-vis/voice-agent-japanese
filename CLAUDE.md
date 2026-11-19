@@ -29,7 +29,7 @@ A voice AI agent for improving Japanese conversational skill: talk freely, get g
 | `bunpro_grammar_points.csv` | `level,number,grammar,meaning,url`; keys are `"{level}-{number}"` (e.g. `N5-13`). Gitignored (`*.csv`) |
 | `ui_server.py` | Browser UI backend (stdlib `http.server`): serves `index.html`, `GET /api/token` (LiveKit token + new `jp-…` room), `GET /api/review?room=` (`saving` → `analyzing` → `done` + `review.session_review` data + `card`), `GET /api/stats` (`stats.compute_stats`) |
 | `stats.py` | Progress statistics: `compute_stats()` (heatmap, streaks, weekly volume/accuracy/mistake types, correct rate, weak spots, fixed points, JLPT levels, turn length, topics) and `session_card()` for the end-of-session card. `uv run python stats.py` prints the JSON |
-| `index.html` | Browser UI: Start/Stop/Statistics, agent state pill + mic dot + mic level bar, live captions, end-of-session review with session card; Statistics view (`#stats`) with hand-written SVG charts. Plain JS, `livekit-client` UMD pinned on jsDelivr |
+| `index.html` | Browser UI (Frutiger Aero theme: CSS/SVG sky-and-hills scene, glass pane, nav rail 練習/記録): one gel orb (`#btn`) is Start/Stop, shows the agent state by colour/motion and the mic level (`--level` on `#stage`); layout switches on `body[data-phase|data-state|data-view]`; live captions, end-of-session review with session card; Statistics view (`#stats`) with hand-written SVG charts. Plain JS, `livekit-client` UMD pinned on jsDelivr |
 | `Code_Documentation.MD` | Older free-form notes |
 
 ## Data flow
@@ -131,7 +131,7 @@ Also needed before sharing a public link: HTTPS everywhere (mic access requires 
 - Graded turns = distinct `grammar_feedback` turns excluding `asr_unclear` (same rule as `gather_stats`); weak spots reuse `recency_weight` and its key-or-type grouping.
 - "Fixed" = Bunpro keys missed ≥2 times with no miss in the last 3 blocks that had ≥5 graded turns.
 - Bunpro keys are only stored on mistakes, so the JLPT chart shows levels of grammar *in mistakes*, not all grammar used.
-- Chart colors are CSS variables (issue types use a validated categorical order; levels an ordinal blue ramp) with light and dark values.
+- Chart colors are CSS variables (issue types use a validated categorical order; levels an ordinal blue ramp; the heatmap an aqua → leaf-green ramp) with light (day) and dark (night) values.
 
 ## Other planned features
 
